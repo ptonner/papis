@@ -16,6 +16,9 @@ def get_default_settings():
                 "Year  : {doc[year]}\n"\
                 "-------\n",
         },
+        "gtk-gui": {
+            "border-width": 10,
+        },
         "tk-gui": {
             "open"         : "o",
             "edit"         : "e",

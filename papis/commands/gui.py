@@ -17,6 +17,12 @@ class Command(papis.commands.Command):
         )
 
         self.parser.add_argument(
+            "--gtk",
+            help="Gtk based UI",
+            action="store_true"
+        )
+
+        self.parser.add_argument(
             "--rofi",
             help="Rofi based UI",
             action="store_true"
@@ -39,6 +45,10 @@ class Command(papis.commands.Command):
         import papis.gui.tk
         return papis.gui.tk.Gui().main(self.documents)
 
+    def gtk_main(self):
+        import papis.gui.gtk
+        return papis.gui.gtk.Gui().main(self.args)
+
     def vim_main(self):
         import papis.gui.vim
         return papis.gui.vim.Gui().main(self.documents, self.args)
@@ -47,6 +57,8 @@ class Command(papis.commands.Command):
         self.documents = self.fetch_documents()
         if self.args.tk:
             return self.tk_main()
+        if self.args.gtk:
+            return self.gtk_main()
         if self.args.vim:
             return self.vim_main()
         if self.args.rofi:
