@@ -1,3 +1,27 @@
+"""
+The add command is one of the central commands of the papis command line
+interface. It is a very versatile command with a fair amount of options.
+
+Examples
+^^^^^^^^
+
+    - Add a document located in ``~/Documents/interesting.pdf``
+      and name the folder where it will be stored in the database
+      ``interesting-paper-2021``
+
+    .. code::
+
+        papis add ~/Documents/interesting.pdf --name interesting-paper-2021
+
+    - Add a paper that you have locally in a file and get the paper
+      information through its ``doi`` identificator (in this case
+      ``10.10763/1.3237134`` as an example):
+
+    .. code::
+
+        papis add ~/Documents/interesting.pdf --from-doi 10.10763/1.3237134
+
+"""
 import papis
 import os
 import sys
@@ -109,6 +133,14 @@ class Command(papis.commands.Command):
             default=None,
             action="store"
         )
+
+        self.parser.add_argument(
+            "--from-lib",
+            help="Add document from another library",
+            default="",
+            action="store"
+        )
+
 
         self.parser.add_argument(
             "--from-vcf",
@@ -247,6 +279,13 @@ class Command(papis.commands.Command):
         # The folder name of the temporary document to be created
         temp_dir = tempfile.mkdtemp("-"+self.args.lib)
 
+        if self.args.from_lib:
+            doc = self.pick(
+                papis.api.get_documents_in_lib(self.get_args().from_lib)
+            )
+            if doc:
+                self.args.from_folder = doc.get_main_folder()
+
         if self.args.from_folder:
             original_document = papis.document.Document(self.args.from_folder)
             self.args.from_yaml = original_document.get_info_file()
@@ -283,7 +322,7 @@ class Command(papis.commands.Command):
             bibtex_data = papis.downloaders.utils.get_downloader(
                 hubmed_url,
                 "get"
-            ).getDocumentData().decode("utf-8")
+            ).get_document_data().decode("utf-8")
             bibtex_data = papis.bibtex.bibtex_to_dict(bibtex_data)
             if len(bibtex_data):
                 data.update(bibtex_data[0])
@@ -309,7 +348,7 @@ class Command(papis.commands.Command):
                 )
                 file_name = tempfile.mktemp()
                 with open(file_name, 'wb+') as fd:
-                    fd.write(down.getDocumentData())
+                    fd.write(down.get_document_data())
                 self.logger.info('Opening the file')
                 papis.api.open_file(file_name)
                 if papis.utils.confirm('Do you want to use this file?'):
@@ -336,7 +375,8 @@ class Command(papis.commands.Command):
                 lib_dir,
                 self.args.to
             )
-            document = self.pick(documents) or sys.exit(0)
+            document = self.pick(documents)
+            if not document: return 0
             document.update(
                 data,
                 interactive=self.args.interactive
@@ -354,7 +394,7 @@ class Command(papis.commands.Command):
                 if len(in_documents_paths) == 0:
                     if not self.get_args().no_document:
                         self.logger.error("No documents to be added")
-                        sys.exit(1)
+                        return 1
                     else:
                         in_documents_paths = [document.get_info_file()]
                         # We need the names to add them in the file field
@@ -394,7 +434,7 @@ class Command(papis.commands.Command):
                 del temp_doc
             if len(out_folder_name) == 0:
                 self.logger.error('The output folder name is empty')
-                sys.exit(1)
+                return 1
 
             data["files"] = in_documents_names
             out_folder_path = os.path.join(
@@ -408,7 +448,7 @@ class Command(papis.commands.Command):
         # Create folders if they do not exists.
         if not os.path.isdir(temp_dir):
             self.logger.debug("Creating directory '%s'" % temp_dir)
-            os.makedirs(temp_dir)
+            os.makedirs(temp_dir, mode=papis.config.getint('dir-umask'))
 
         # Check if the user wants to edit before submitting the doc
         # to the library
@@ -444,6 +484,22 @@ class Command(papis.commands.Command):
                 )
                 shutil.copy(in_file_path, endDocumentPath)
 
+        # Duplication checking
+        self.logger.debug("Check if the added document is already existing")
+        found_document = papis.utils.locate_document(
+            document, papis.api.get_documents_in_lib(papis.api.get_lib())
+        )
+        if found_document is not None:
+            self.logger.warning("DUPLICATION WARNING")
+            self.logger.warning(
+                "This document seems to be already in your libray: \n\n" +
+                found_document.dump()
+            )
+            self.logger.warning(
+                "Use the update command if you just want to update the info."
+            )
+            self.args.confirm = True
+
         document.update(data, force=True)
         if self.get_args().open:
             for d_path in in_documents_paths:
@@ -453,12 +509,15 @@ class Command(papis.commands.Command):
                 return 0
         document.save()
         if self.args.to:
-            sys.exit(0)
+            return 0
         self.logger.debug(
             "[MV] '%s' to '%s'" %
             (document.get_main_folder(), out_folder_path)
         )
         shutil.move(document.get_main_folder(), out_folder_path)
+        # Let us chmod it because it might come from a temp folder
+        # and temp folders are per default 0o600
+        os.chmod(out_folder_path, papis.config.getint('dir-umask'))
         papis.api.clear_lib_cache()
         if self.args.commit and papis.utils.lib_is_git_repo(self.args.lib):
             subprocess.call(["git", "-C", out_folder_path, "add", "."])

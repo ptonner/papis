@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "PAPIS-CONFIG" "1" "Oct 03, 2017" "0.3" "papis"
+.TH "PAPIS-CONFIG" "1" "Nov 12, 2017" "0.4.6" "papis"
 .SH NAME
 papis-config \- Papis Configuration
 .
@@ -170,6 +170,9 @@ Default: \fBpapers\fP
 .sp
 Library to be open if no library has not been explicitly selected.
 .TP
+.B dir\-umask
+Default: \fB493\fP
+.TP
 .B doc\-url\-key\-name
 Default: \fBdoc_url\fP
 .TP
@@ -178,6 +181,28 @@ Default: \fBvim\fP
 .TP
 .B export\-text\-format
 Default: \fB{doc[author]}. {doc[title]}. {doc[journal]} {doc[pages]} {doc[month]} {doc[year]}\fP
+.TP
+.B extra\-bibtex\-keys
+Default: 
+.nf
+\(ga\(ga
+.fi
+
+.nf
+\(ga\(ga
+.fi
+
+.TP
+.B extra\-bibtex\-types
+Default: 
+.nf
+\(ga\(ga
+.fi
+
+.nf
+\(ga\(ga
+.fi
+
 .TP
 .B file\-browser
 Default: \fBxdg\-open\fP
@@ -216,7 +241,7 @@ Default: \fB\&.*papis\-short\-help: *(.*)\fP
 Default: \fBhttps://duckduckgo.com\fP
 .TP
 .B sync\-command
-Default: \fBgit \-C $dir pull origin master\fP
+Default: \fBgit \-C {lib[dir]} pull origin master\fP
 .TP
 .B use\-cache
 Default: \fBTrue\fP
@@ -229,6 +254,52 @@ Default: \fBMozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (K
 .TP
 .B xeditor
 Default: \fBxdg\-open\fP
+.UNINDENT
+.SS vim\-gui
+.INDENT 0.0
+.TP
+.B delete\-key
+Default: \fBdd\fP
+.TP
+.B edit\-key
+Default: \fBe\fP
+.TP
+.B header\-format
+.INDENT 7.0
+.TP
+.B Default:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+Title : {doc[title]}
+Author: {doc[author]}
+Year  : {doc[year]}
+\-\-\-\-\-\-\-
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.TP
+.B help\-key
+Default: \fBh\fP
+.TP
+.B next\-search\-key
+Default: \fBn\fP
+.TP
+.B open\-dir\-key
+Default: \fB<S\-o>\fP
+.TP
+.B open\-key
+Default: \fBo\fP
+.TP
+.B prev\-search\-key
+Default: \fBN\fP
+.TP
+.B search\-key
+Default: \fB/\fP
 .UNINDENT
 .SS tk\-gui
 .INDENT 0.0
@@ -436,52 +507,6 @@ Default: \fB|\fP
 .TP
 .B width
 Default: \fB80\fP
-.UNINDENT
-.SS vim\-gui
-.INDENT 0.0
-.TP
-.B delete\-key
-Default: \fBdd\fP
-.TP
-.B edit\-key
-Default: \fBe\fP
-.TP
-.B header\-format
-.INDENT 7.0
-.TP
-.B Default:
-.INDENT 7.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-Title : {doc[title]}
-Author: {doc[author]}
-Year  : {doc[year]}
-\-\-\-\-\-\-\-
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.UNINDENT
-.TP
-.B help\-key
-Default: \fBh\fP
-.TP
-.B next\-search\-key
-Default: \fBn\fP
-.TP
-.B open\-dir\-key
-Default: \fB<S\-o>\fP
-.TP
-.B open\-key
-Default: \fBo\fP
-.TP
-.B prev\-search\-key
-Default: \fBN\fP
-.TP
-.B search\-key
-Default: \fB/\fP
 .UNINDENT
 .SH AUTHOR
 Alejandro Gallo

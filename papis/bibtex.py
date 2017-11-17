@@ -1,6 +1,7 @@
 import re
 import logging
 import os
+import papis.config
 
 logger = logging.getLogger("bibtex")
 
@@ -19,7 +20,7 @@ bibtex_types = [
   "proceedings",
   "techreport",
   "unpublished"
-]
+] + re.sub(r" *", "", papis.config.get('extra-bibtex-types')).split(',')
 
 bibtex_keys = [
   "address",
@@ -46,7 +47,7 @@ bibtex_keys = [
   "title",
   "volume",
   "year"
-  ]
+  ] + re.sub(r" *", "", papis.config.get('extra-bibtex-keys')).split(',')
 
 
 def bibtexparser_entry_to_papis(entry):
@@ -97,7 +98,7 @@ def bibtex_to_dict(bibtex):
     else:
         text = bibtex
     logger.debug("Removing comments...")
-    text = re.sub(r"%.*", "", text)
+    text = re.sub(r" +%.*", "", text)
     logger.debug("Removing empty lines...")
     text = re.sub(r"^\s*$", "", text)
     entries = bibtexparser.loads(text).entries

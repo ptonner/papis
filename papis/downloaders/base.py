@@ -2,6 +2,7 @@ import os
 import logging
 import urllib.request
 import papis.config
+import papis.utils
 
 
 class Downloader(object):
@@ -9,13 +10,17 @@ class Downloader(object):
     """This is the base class for every downloader.
     """
 
-    def __init__(self, url=""):
+    def __init__(self, url="", name=""):
         self.url = url
-        self.src = os.path.basename(__file__)
-        self.logger = logging.getLogger("downloaders:"+self.src)
+        self.name = name or os.path.basename(__file__)
+        self.logger = logging.getLogger("downloaders:"+self.name)
         self.bibtex_data = None
         self.document_data = None
         self.logger.debug("[url] = %s" % url)
+        self.expected_document_format = None
+
+    def __repr__(self):
+        return self.get_name()
 
     @classmethod
     def match(url):
@@ -37,7 +42,7 @@ class Downloader(object):
             "Matching url not implemented for this downloader"
         )
 
-    def getBibtexUrl(self):
+    def get_bibtex_url(self):
         """It returns the urls that is to be access to download
         the bibtex information. It has to be implemented for every
         downloader, or otherwise it will raise an exception.
@@ -49,7 +54,7 @@ class Downloader(object):
             "Getting bibtex url not implemented for this downloader"
         )
 
-    def getBibtexData(self):
+    def get_bibtex_data(self):
         """Get the bibtex_data data if it has been downloaded already
         and if not download it and return the data in utf-8 format.
 
@@ -57,19 +62,19 @@ class Downloader(object):
         :rtype:  str
         """
         if not self.bibtex_data:
-            self.downloadBibtex()
+            self.download_bibtex()
         return self.bibtex_data
 
-    def downloadBibtex(self):
+    def download_bibtex(self):
         """Bibtex downloader, it should try to download bibtex information from
-        the url provided by ``getBibtexUrl``.
+        the url provided by ``get_bibtex_url``.
 
         It sets the ``bibtex_data`` attribute if it succeeds.
 
         :returns: Nothing
         :rtype:  None
         """
-        url = self.getBibtexUrl()
+        url = self.get_bibtex_url()
         if not url:
             return False
         data = urllib.request.urlopen(url)\
@@ -77,7 +82,7 @@ class Downloader(object):
             .decode('utf-8')
         self.bibtex_data = data
 
-    def getDocumentUrl(self):
+    def get_document_url(self):
         """It returns the urls that is to be access to download
         the document information. It has to be implemented for every
         downloader, or otherwise it will raise an exception.
@@ -89,7 +94,7 @@ class Downloader(object):
             "Getting bibtex url not implemented for this downloader"
         )
 
-    def getDoi(self):
+    def get_doi(self):
         """It returns the doi of the document, if it is retrievable.
         It has to be implemented for every downloader, or otherwise it will
         raise an exception.
@@ -101,7 +106,7 @@ class Downloader(object):
             "Getting document url not implemented for this downloader"
         )
 
-    def getDocumentData(self):
+    def get_document_data(self):
         """Get the document_data data if it has been downloaded already
         and if not download it and return the data in binary format.
 
@@ -109,12 +114,12 @@ class Downloader(object):
         :rtype:  str
         """
         if not self.document_data:
-            self.downloadDocument()
+            self.download_document()
         return self.document_data
 
-    def downloadDocument(self):
+    def download_document(self):
         """Document downloader, it should try to download document information from
-        the url provided by ``getDocumentUrl``.
+        the url provided by ``get_document_url``.
 
         It sets the ``document_data`` attribute if it succeeds.
 
@@ -122,7 +127,7 @@ class Downloader(object):
         :rtype:  None
         """
         self.logger.debug("Downloading document")
-        url = self.getDocumentUrl()
+        url = self.get_document_url()
         if not url:
             return False
         request = urllib.request.Request(
@@ -134,7 +139,7 @@ class Downloader(object):
         data = urllib.request.urlopen(request).read()
         self.document_data = data
 
-    def setUrl(self, url):
+    def set_url(self, url):
         """Url setter for Downloader
 
         :param url: String containing a valid url
@@ -144,9 +149,38 @@ class Downloader(object):
         self.url = url
         return self
 
-    def getUrl(self):
+    def get_url(self):
         """Url getter for Downloader
         :returns: Main url of the Downloader
         :rtype:  str
         """
         return self.url
+
+    def check_document_format(self):
+        """Check if the downloaded document has the filetype that the
+        downloader expects. If the downloader does not expect any special
+        filetype, accept anything because there is no way to know if it is
+        correct.
+
+        :returns: True if it is of the right type, else otherwise
+        :rtype:  bool
+        """
+        if self.expected_document_format is None:
+            return True
+        result = papis.utils.file_is(
+            self.get_document_data(),
+            self.expected_document_format
+        )
+        if not result:
+            self.logger.warning(
+                "The downloaded data does not seem to be of"
+                "the correct type (%s)" % self.expected_document_format
+            )
+        return result
+
+    def get_name(self):
+        """Get name of the downloader
+        :returns: Name
+
+        """
+        return self.name

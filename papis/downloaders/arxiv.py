@@ -7,7 +7,8 @@ import arxiv2bib
 class Downloader(papis.downloaders.base.Downloader):
 
     def __init__(self, url):
-        papis.downloaders.base.Downloader.__init__(self, url)
+        papis.downloaders.base.Downloader.__init__(self, url, name="arxiv")
+        self.expected_document_format = 'pdf'
 
     @classmethod
     def match(cls, url):
@@ -28,7 +29,7 @@ class Downloader(papis.downloaders.base.Downloader):
         False
         >>> import re; re.match(\
                 r".*\.pdf\.pdf$",\
-                Downloader.match('https://arxiv.org/pdf/1707.09820.pdf').getDocumentUrl()\
+                Downloader.match('https://arxiv.org/pdf/1707.09820.pdf').get_document_url()\
             ) is None
         True
         """
@@ -46,24 +47,23 @@ class Downloader(papis.downloaders.base.Downloader):
         """Get arxiv identifier
         :returns: Identifier
         """
-        url = self.getUrl()
+        url = self.get_url()
         return re.sub(r'^.*arxiv.org/(abs|pdf)/(.*)\/?$', r'\2', url)
 
-    def getBibtexUrl(self):
+    def get_bibtex_url(self):
         identifier = self.get_identifier()
         return identifier
 
-    def downloadBibtex(self):
-        bib_url = self.getBibtexUrl()
+    def download_bibtex(self):
+        bib_url = self.get_bibtex_url()
         bibtexCli = arxiv2bib.Cli([bib_url])
         bibtexCli.run()
         self.logger.debug("[bibtex url] = %s" % bib_url)
         data = os.linesep.join(bibtexCli.output)
         self.bibtex_data = data
 
-    def getDocumentUrl(self):
+    def get_document_url(self):
         # https://arxiv.org/pdf/1702.01590
-        url = self.getUrl()
         identifier = self.get_identifier()
         self.logger.debug("[paper id] = %s" % identifier)
         pdf_url = "https://arxiv.org/pdf/"+identifier+".pdf"
