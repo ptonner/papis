@@ -76,6 +76,25 @@ def get_libraries():
     return libs
 
 
+def pick_doc(documents):
+    """Pick a document from documents with the correct formatting
+
+    :documents: List of documents
+    :returns: Document
+
+    """
+    header_format = papis.config.get("header-format")
+    match_format = papis.config.get("match-format")
+    pick_config = dict(
+        header_filter=lambda x: papis.utils.format_doc(header_format, x),
+        match_filter=lambda x: papis.utils.format_doc(match_format, x)
+    )
+    return papis.api.pick(
+        documents,
+        pick_config
+    )
+
+
 def pick(options, pick_config={}):
     """This is a wrapper for the various pickers that are supported.
     Depending on the configuration different selectors or 'pickers'
@@ -118,37 +137,43 @@ def pick(options, pick_config={}):
         raise Exception("I don't know how to use the picker '%s'" % picker)
 
 
-def open_file(file_path):
+def open_file(file_path, wait=True):
     """Open file using the ``opentool`` key value as a program to
     handle file_path.
 
     :param file_path: File path to be handled.
     :type  file_path: str
+    :param wait: Wait for the completion of the opener program to continue
+    :type  wait: bool
 
     """
-    papis.utils.general_open(file_path, "opentool")
+    papis.utils.general_open(file_path, "opentool", wait=wait)
 
 
-def open_dir(dir_path):
+def open_dir(dir_path, wait=True):
     """Open dir using the ``file-browser`` key value as a program to
     open dir_path.
 
     :param dir_path: Folder path to be handled.
     :type  dir_path: str
+    :param wait: Wait for the completion of the opener program to continue
+    :type  wait: bool
 
     """
-    papis.utils.general_open(dir_path, "file-browser")
+    papis.utils.general_open(dir_path, "file-browser", wait=wait)
 
 
-def edit_file(file_path):
+def edit_file(file_path, wait=True):
     """Edit file using the ``editor`` key value as a program to
     handle file_path.
 
     :param file_path: File path to be handled.
     :type  file_path: str
+    :param wait: Wait for the completion of the opener program to continue
+    :type  wait: bool
 
     """
-    papis.utils.general_open(file_path, "editor")
+    papis.utils.general_open(file_path, "editor", wait=wait)
 
 
 def get_documents_in_dir(directory, search=""):
@@ -186,7 +211,8 @@ def get_documents_in_lib(library=None, search=""):
     :rtype: list
 
     """
-    directory = papis.config.get("dir", section=library)
+    directory = library if os.path.exists(library) \
+        else papis.config.get("dir", section=library)
     return papis.api.get_documents_in_dir(directory, search)
 
 

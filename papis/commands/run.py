@@ -1,7 +1,25 @@
+"""
+This command is useful to issue commands in the directory of your library.
+
+Here are some examples of its usage:
+
+    - List files in your directory
+
+    .. code::
+
+        papis run ls
+
+    - Find a file in your directory using the ``find`` command
+
+    .. code::
+
+        papis run find -name 'document.pdf'
+"""
 import string
 import os
 import papis.config
 import papis.exceptions
+import argparse
 
 
 class Command(papis.commands.Command):
@@ -17,7 +35,7 @@ class Command(papis.commands.Command):
             "run_command",
             help="Command name or command",
             default="",
-            nargs="+",
+            nargs=argparse.REMAINDER,
             action="store"
         )
 

@@ -1,6 +1,7 @@
 import re
 import logging
 import os
+import papis.config
 
 logger = logging.getLogger("bibtex")
 
@@ -19,34 +20,81 @@ bibtex_types = [
   "proceedings",
   "techreport",
   "unpublished"
-]
+] + re.sub(r" *", "", papis.config.get('extra-bibtex-types')).split(',')
 
 bibtex_keys = [
-  "address",
-  "annote",
-  "author",
-  "booktitle",
-  "doi",
-  "chapter",
-  "crossref",
-  "edition",
-  "editor",
-  "howpublished",
-  "institution",
-  "journal",
-  "key",
-  "month",
-  "note",
-  "number",
-  "organization",
-  "pages",
-  "publisher",
-  "school",
-  "series",
-  "title",
-  "volume",
-  "year"
-  ]
+    "addendum",
+    "address",
+    "afterword",
+    "annotator",
+    "annote",
+    "author",
+    "bookauthor",
+    "booksubtitle",
+    "booktitle",
+    "booktitleaddon",
+    "chapter",
+    "commentator",
+    "crossref",
+    "date",
+    "doi",
+    "edition",
+    "editor",
+    "editora",
+    "editorb",
+    "editorc",
+    "eid",
+    "eprint",
+    "eprintclass",
+    "eprinttype",
+    "eventdate",
+    "eventtitle",
+    "eventtitleaddon",
+    "foreword",
+    "holder",
+    "howpublished",
+    "institution",
+    "introduction",
+    "isbn",
+    "isrn",
+    "issn",
+    "issue",
+    "issuesubtitle",
+    "issuetitle",
+    "journal",
+    "journalsubtitle",
+    "journaltitle",
+    "key",
+    "language",
+    "location",
+    "mainsubtitle",
+    "maintitle",
+    "maintitleaddon",
+    "month",
+    "note",
+    "number",
+    "organization",
+    "origlanguage",
+    "pages",
+    "pagetotal",
+    "part",
+    "publisher",
+    "pubstate",
+    "school",
+    "series",
+    "subtitle",
+    "title",
+    "titleaddon",
+    "translator",
+    "type",
+    "url",
+    "urldate",
+    "venue",
+    "version",
+    "volume",
+    "volumes",
+    "year",
+  ] + re.sub(r" *", "", papis.config.get('extra-bibtex-keys')).split(',')
 
 
 def bibtexparser_entry_to_papis(entry):
@@ -97,7 +145,7 @@ def bibtex_to_dict(bibtex):
     else:
         text = bibtex
     logger.debug("Removing comments...")
-    text = re.sub(r"%.*", "", text)
+    text = re.sub(r" +%.*", "", text)
     logger.debug("Removing empty lines...")
     text = re.sub(r"^\s*$", "", text)
     entries = bibtexparser.loads(text).entries

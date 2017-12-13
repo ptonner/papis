@@ -94,6 +94,17 @@ class Document(object):
             else:
                 return True
 
+    def rm_file(self, filepath):
+        """Remove file from document, it also removes the entry in `files`
+
+        :filepath: Full file path for file
+        """
+        basename = os.path.basename(filepath)
+        if basename not in self['files']:
+            raise Exception("File %s not tracked by document" % basename)
+        os.remove(filepath)
+        self['files'].pop(self['files'].index(basename))
+
     def rm(self):
         """Removes document's folder, effectively removing it from the library.
         """
@@ -108,8 +119,21 @@ class Document(object):
         for key in self.keys():
             structure[key] = self[key]
         # self.logger.debug("Saving %s " % self.get_info_file())
-        yaml.dump(structure, fd, default_flow_style=False)
+        yaml.dump(
+            structure,
+            fd,
+            allow_unicode=papis.config.getboolean("info-allow-unicode"),
+            default_flow_style=False
+        )
         fd.close()
+
+    def to_json(self):
+        """Export information into a json string
+        :returns: Json formatted info file
+        :rtype:  str
+        """
+        import json
+        return json.dumps(self.to_dict())
 
     def to_dict(self):
         """Gets a python dictionary with the information of the document

@@ -14,8 +14,7 @@ import papis.document
 import papis.crossref
 import papis.bibtex
 
-
-def general_open(fileName, key, default_opener="xdg-open", wait=False):
+def general_open(fileName, key, default_opener="xdg-open", wait=True):
     try:
         opener = papis.config.get(key)
     except KeyError:
@@ -26,7 +25,13 @@ def general_open(fileName, key, default_opener="xdg-open", wait=False):
         if wait:
             return os.system(" ".join([opener, fileName]))
         else:
-            return call([opener, fileName])
+            cmd = opener.split() + [fileName]
+            logger.debug("Open cmd %s" % cmd)
+            import subprocess
+            return subprocess.Popen(
+                cmd, shell=False,
+                stdin=None, stdout=None, stderr=None, close_fds=True
+            )
     elif hasattr(opener, '__call__'):
         return opener(fileName)
     else:
@@ -44,7 +49,7 @@ def get_regex_from_search(search):
     return r".*"+re.sub(r"\s+", ".*", search)
 
 
-def format_doc(python_format, document):
+def format_doc(python_format, document, key=""):
     """Construct a string using a pythonic format string and a document.
 
     :param python_format: Python-like format string.
@@ -57,7 +62,7 @@ def format_doc(python_format, document):
     :returns: Formated string
     :rtype: str
     """
-    doc = papis.config.get("format-doc-name")
+    doc = key or papis.config.get("format-doc-name")
     return python_format.format(**{doc: document})
 
 
@@ -174,7 +179,7 @@ class DocMatcher(object):
         cls.logger.debug('Parsing search')
         search = search or cls.search
         papis_alphas = pyparsing.printables.replace('=', '')
-        papis_key = pyparsing.Word(pyparsing.alphanums)
+        papis_key = pyparsing.Word(pyparsing.alphanums + '-')
         papis_value = pyparsing.QuotedString(
             quoteChar='"', escChar='\\', escQuote='\\'
         ) ^ pyparsing.QuotedString(
@@ -491,3 +496,76 @@ def git_commit(path="", message=""):
     logger.debug(cmd)
     message = '-m "%s"' % message if len(message) > 0 else ''
     call(cmd)
+
+
+def locate_document(document, documents):
+    """Try to figure out if a document is already within a list of documents.
+
+    :param document: Document to be searched for
+    :type  document: papis.document.Document
+    :param documents: Documents to search in
+    :type  documents: list
+    :returns: TODO
+
+    """
+    for d in documents:
+        for key in ['doi', 'ref', 'isbn', 'isbn10', 'url']:
+            if 'doi' in document.keys() and 'doi' in d.keys():
+                if document['doi'] == d['doi']:
+                    return d
+    docs = filter_documents(
+        documents,
+        search='author = "{doc[author]}" title = "{doc[title]}"'.format(
+            doc=document
+        )
+    )
+    if len(docs) == 1:
+        return docs[0]
+    return None
+
+
+def file_is(file_description, fmt):
+    """Get if file stored in `file_path` is a `fmt` document.
+
+    :file_path: Full path for a `fmt` file or a buffer containing `fmt` data.
+    :returns: True if is `fmt` and False otherwise
+
+    """
+    import magic
+    logger.debug("Checking filetype")
+    try:
+        # This means that the file_description is a string
+        file_description.decode('utf-8')
+        result = re.match(
+            r".*%s.*" % fmt, magic.from_file(file_description, mime=True)
+        )
+        if result:
+            logger.debug(
+                "File %s appears to be of type %s" % (file_description, fmt)
+            )
+    except:
+        # Suppose that file_description is a buffer
+        result = re.match(
+            r".*%s.*" % fmt, magic.from_buffer(file_description, mime=True)
+        )
+        if result:
+            logger.debug(
+                "Buffer appears to be of type %s" % (fmt)
+            )
+    return True if result else False
+
+
+def is_pdf(file_description):
+    return file_is(file_description, 'pdf')
+
+
+def is_djvu(file_description):
+    return file_is(file_description, 'djvu')
+
+
+def is_epub(file_description):
+    return file_is(file_description, 'epub')
+
+
+def is_mobi(file_description):
+    return file_is(file_description, 'mobi')

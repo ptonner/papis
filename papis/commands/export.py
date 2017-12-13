@@ -1,3 +1,38 @@
+"""
+The export command is useful to work with other programs such as bibtex.
+
+Some examples of its usage are:
+
+    - Export one of the documents matching the author with einstein to bibtex:
+
+    .. code::
+
+        papis export --bibtex 'author = einstein'
+
+    or export all of them
+
+    .. code::
+
+        papis export --bibtex --all 'author = einstein'
+
+    - Export all documents to bibtex and save them into a ``lib.bib`` file
+
+    .. code::
+
+        papis export --all --bibtex --out lib.bib
+
+    - Export a folder of one of the documents matching the word ``krebs``
+      into a folder named, ``interesting-document``
+
+    .. code::
+
+        papis export --folder --out interesting-document krebs
+
+    this will create the folder ``interesting-document`` containing the
+    ``info.yaml`` file, the linked documents and a ``bibtex`` file for
+    sharing with other people.
+
+"""
 import papis
 import os
 import sys
@@ -17,7 +52,7 @@ class Command(papis.commands.Command):
 
         self.parser.add_argument(
             "--yaml",
-            help="Export into bibtex",
+            help="Export into yaml",
             default=False,
             action="store_true"
         )
@@ -25,6 +60,13 @@ class Command(papis.commands.Command):
         self.parser.add_argument(
             "--bibtex",
             help="Export into bibtex",
+            default=False,
+            action="store_true"
+        )
+
+        self.parser.add_argument(
+            "--json",
+            help="Export into json",
             default=False,
             action="store_true"
         )
@@ -70,32 +112,12 @@ class Command(papis.commands.Command):
             action="store_true"
         )
 
-    def export(self, document):
-        """Main action in export command
-        """
-        folder = document.get_main_folder()
-        if not self.args.folder and not self.args.out:
-            self.args.out = "/dev/stdout"
-        if self.args.bibtex:
-            print(document.to_bibtex())
-        if self.args.text:
-            text_format = papis.config.get('export-text-format')
-            text = papis.utils.format_doc(text_format, document)
-            open(self.args.out, "w").write(text)
-        elif self.args.folder:
-            outdir = self.args.out or document.get_main_folder_name()
-            shutil.copytree(folder, outdir)
-            if not self.args.no_bibtex:
-                open(
-                    os.path.join(outdir, "info.bib"),
-                    "w+"
-                ).write(document.to_bibtex())
-        elif self.args.yaml:
-            open(self.args.out, "w").write(document.dump())
-        elif self.args.vcf:
-            open(self.args.out, "w").write(document.to_vcf())
-        else:
-            pass
+        self.parser.add_argument(
+            "--file",
+            help="Export (copy) pdf file to outfile",
+            default=False,
+            action="store_true"
+        )
 
     def main(self):
 
@@ -104,9 +126,64 @@ class Command(papis.commands.Command):
             self.get_args().search
         )
 
+        if self.args.json and self.args.folder or \
+           self.args.yaml and self.args.folder:
+            self.logger.warning("Only --folder flag will be considered")
+
         if not self.args.all:
-            document = self.pick(documents) or sys.exit(0)
+            document = self.pick(documents)
+            if not document: return 0
             documents = [document]
 
+        if self.args.out and not self.get_args().folder:
+            self.args.out = open(self.get_args().out, 'a+')
+
+        if not self.args.out and not self.get_args().folder:
+            self.args.out = sys.stdout
+
+        if self.args.json and not self.args.folder:
+            import json
+            return self.args.out.write(
+                json.dumps([document.to_dict() for document in documents])
+            )
+
+        if self.args.yaml and not self.args.folder:
+            import yaml
+            return self.args.out.write(
+                yaml.dump_all([document.to_dict() for document in documents])
+            )
+
         for document in documents:
-            self.export(document)
+            if self.args.bibtex:
+                self.args.out.write(document.to_bibtex())
+            if self.args.text:
+                text_format = papis.config.get('export-text-format')
+                text = papis.utils.format_doc(text_format, document)
+                self.args.out.write(text)
+            elif self.args.folder:
+                folder = document.get_main_folder()
+                outdir = self.args.out or document.get_main_folder_name()
+                if not len(documents) == 1:
+                    outdir = os.path.join(
+                        outdir, document.get_main_folder_name())
+                shutil.copytree(folder, outdir)
+                if not self.args.no_bibtex:
+                    open(
+                        os.path.join(outdir, "info.bib"),
+                        "a+"
+                    ).write(document.to_bibtex())
+            elif self.args.vcf:
+                self.args.out.write(document.to_vcf())
+            elif self.args.file:
+                files = document.get_files()
+                file_to_open = papis.api.pick(
+                    files,
+                    pick_config=dict(
+                        header_filter=lambda x: x.replace(
+                            document.get_main_folder(), ""
+                        )
+                    )
+                )
+                shutil.copyfile(file_to_open, self.args.out.name)
+            else:
+                pass

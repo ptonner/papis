@@ -334,7 +334,7 @@ def get_cross_ref(doi):
     res.update(get_citation_info_from_results(record))
 
     # REFERENCE BUILDING
-    res["ref"] = doi
+    res['ref'] = papis.utils.format_doc(papis.config.get("ref-format"), res)
 
     # Journal checking
     # If the key journal does not exist check for abbrev_journal_title
@@ -347,6 +347,28 @@ def get_cross_ref(doi):
     return res
 
 
+def get_clean_doi(doi):
+    """Check if doi is actually a url and in that case just get
+    the exact doi.
+
+    :doi: String containing a doi
+    :returns: The pure doi
+
+    >>> get_clean_doi('http://dx.doi.org/10.1063/1.881498')
+    '10.1063/1.881498'
+    >>> get_clean_doi('10.1063/1.881498')
+    '10.1063/1.881498'
+    >>> get_clean_doi('http://physicstoday.scitation.org/doi/10.1063/1.881498')
+    '10.1063/1.881498'
+    >>> get_clean_doi('http://physicstoday.scitation.org/doi/10.1063/1.881498?asdfwer')
+    '10.1063/1.881498'
+    """
+    mdoi = re.match(r'(.*doi(.org)?/)?(.*/[^?&%^$]*).*', doi)
+    if mdoi:
+        return mdoi.group(3)
+    else:
+        return None
+
 def doi_to_data(doi):
     """Search through crossref and get a dictionary containing the data
 
@@ -356,6 +378,7 @@ def doi_to_data(doi):
 
     """
     global logger
+    doi = get_clean_doi(doi)
     try:
         data = get_cross_ref(doi)
     except Exception as e:
