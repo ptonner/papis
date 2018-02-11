@@ -5,7 +5,10 @@ import papis.downloaders.base
 class Downloader(papis.downloaders.base.Downloader):
 
     def __init__(self, url):
-        papis.downloaders.base.Downloader.__init__(self, url)
+        papis.downloaders.base.Downloader.__init__(
+            self, url, name="scitationaip"
+        )
+        self.expected_document_format = 'pdf'
 
     @classmethod
     def match(cls, url):
@@ -15,23 +18,22 @@ class Downloader(papis.downloaders.base.Downloader):
         else:
             return False
 
-    def getDoi(self):
-        mdoi = re.match(r'.*scitation.org/doi/(.*)', self.getUrl())
+    def get_doi(self):
+        mdoi = re.match(r'.*/doi/(.*/[^?&%^$]*).*', self.get_url())
         if mdoi:
             doi = mdoi.group(1).replace("abs/", "").replace("full/", "")
-            self.logger.debug("[doi] = %s" % doi)
             return doi
         else:
-            self.logger.error("Doi not found!!")
+            return None
 
-    def getDocumentUrl(self):
+    def get_document_url(self):
         # http://aip.scitation.org/doi/pdf/10.1063/1.4873138
-        durl = "http://aip.scitation.org/doi/pdf/%s" % self.getDoi()
+        durl = "http://aip.scitation.org/doi/pdf/%s" % self.get_doi()
         self.logger.debug("[doc url] = %s" % durl)
         return durl
 
-    def getBibtexUrl(self):
+    def get_bibtex_url(self):
         url = "http://aip.scitation.org/action/downloadCitation"\
-              "?format=bibtex&cookieSet=1&doi=%s" % self.getDoi()
+              "?format=bibtex&cookieSet=1&doi=%s" % self.get_doi()
         self.logger.debug("[bibtex url] = %s" % url)
         return url

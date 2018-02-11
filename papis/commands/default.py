@@ -87,7 +87,7 @@ class Command(papis.commands.Command):
         self.default_parser.add_argument(
             "--set",
             help="Set key value, e.g., "
-                 "--set info-name=information.yaml,opentool=evince",
+                 "--set 'info-name = \"information.yaml\"  opentool = evince'",
             action="store"
         )
 
@@ -104,13 +104,16 @@ class Command(papis.commands.Command):
 
         if self.args.version:
             print('Papis - %s' % papis.__version__)
-            sys.exit(0)
+            return 0
 
         if self.args.set:
-            key_vals = [d.split("=") for d in self.args.set.split(",")]
+            key_vals = papis.utils.DocMatcher.parse(self.args.set)
+            self.logger.debug('Parsed set %s' % key_vals)
             for pair in key_vals:
+                if len(pair) != 3:
+                    continue
                 key = pair[0]
-                val = pair[1]
+                val = pair[2]
                 papis.config.set(key, val)
 
         if self.args.config:
@@ -137,7 +140,21 @@ class Command(papis.commands.Command):
                 self.logger.error(
                     "Library '%s' does not seem to exist" % self.args.lib
                 )
-                sys.exit(1)
+                return 1
+
+        # Now the library should be set, let us check if there is a
+        # local configuration file there, and if there is one, then
+        # merge its contents
+        local_config_file = os.path.expanduser(
+            os.path.join(
+                papis.config.get("dir"),
+                papis.config.get("local-config-file")
+            )
+        )
+        papis.config.merge_configuration_from_path(
+            local_config_file,
+            self.get_config()
+        )
 
         if self.args.clear_cache:
             papis.api.clear_lib_cache(self.args.lib)

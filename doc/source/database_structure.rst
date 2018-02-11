@@ -71,7 +71,7 @@ documents is stored. These cache files are stored in
 
 ::
 
-  ~/.papis/cache
+  ~/.cache/papis/
 
 Some papis commands clear the cache automatically, for example the ``add`` and
 ``rm`` command clear the cache when something is changed.
@@ -91,3 +91,13 @@ and set it to ``False``, e.g.
   [books]
   # Use cache for books but don't use for the rest of libraries
   use-cache = True
+
+Clearing the cache
+^^^^^^^^^^^^^^^^^^
+
+To clear the cache for a given library you can use the flag
+``--clear-cache``, e.g.
+
+.. code::
+
+    papis --clear-cache

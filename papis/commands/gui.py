@@ -29,6 +29,12 @@ class Command(papis.commands.Command):
         )
 
         self.parser.add_argument(
+            "--urwid",
+            help="Urwid based UI",
+            action="store_true"
+        )
+
+        self.parser.add_argument(
             "--vim",
             help="Vim based UI",
             action="store_true"
@@ -36,6 +42,10 @@ class Command(papis.commands.Command):
 
     def fetch_documents(self):
         return papis.api.get_documents_in_lib(self.args.lib)
+
+    def urwid_main(self):
+        import papis.gui.urwid
+        return papis.gui.urwid.Gui().main()
 
     def rofi_main(self):
         import papis.gui.rofi
@@ -59,6 +69,8 @@ class Command(papis.commands.Command):
             return self.tk_main()
         if self.args.gtk:
             return self.gtk_main()
+        if self.args.urwid:
+            return self.urwid_main()
         if self.args.vim:
             return self.vim_main()
         if self.args.rofi:

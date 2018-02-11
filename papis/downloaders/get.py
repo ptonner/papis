@@ -4,7 +4,7 @@ import papis.downloaders.base
 
 class Downloader(papis.downloaders.base.Downloader):
     def __init__(self, url):
-        papis.downloaders.base.Downloader.__init__(self, url)
+        papis.downloaders.base.Downloader.__init__(self, url, name="get")
 
     @classmethod
     def match(cls, url):
@@ -22,5 +22,5 @@ class Downloader(papis.downloaders.base.Downloader):
         else:
             return False
 
-    def getDocumentUrl(self):
-        return self.getUrl()
+    def get_document_url(self):
+        return self.get_url()

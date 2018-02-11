@@ -5,6 +5,54 @@ import papis.utils
 import papis.config
 import papis.bibtex
 
+import logging
+logger = logging.getLogger("document")
+
+def open_in_browser(document):
+    """Browse document's url whenever possible.
+
+    :document: Document object
+
+    """
+    global logger
+    url = None
+    if "url" in document.keys():
+        url = document["url"]
+    elif 'doi' in document.keys():
+        url = 'https://doi.org/' + document['doi']
+    elif papis.config.get('doc-url-key-name') in document.keys():
+        url = document[papis.config.get('doc-url-key-name')]
+    else:
+        from urllib.parse import urlencode
+        params = {
+            'q': papis.utils.format_doc(
+                papis.config.get('browse-query-format'),
+                document
+            )
+        }
+        url = papis.config.get('search-engine') + '/?' + urlencode(params)
+
+    if url is None:
+        logger.warning(
+            "No url for %s possible" % (document.get_main_folder_name())
+        )
+    else:
+        logger.debug("Opening url %s:" % url)
+        papis.utils.general_open(
+            url, "browser", wait=False
+        )
+
+
+def from_data(data):
+    """Construct a document object from a data dictionary.
+
+    :param data: Data to be copied to a new document
+    :type  data: dict
+    :returns: A papis document
+    :rtype:  papis.document.Document
+    """
+    return papis.document.Document(data=data)
+
 
 class Document(object):
 
@@ -17,14 +65,12 @@ class Document(object):
 
     def __init__(self, folder=None, data=None):
         self._keys = []
-        self._folder = folder
+        self._folder = None
+
         if folder is not None:
-            self._infoFilePath = \
-                os.path.join(folder, papis.utils.get_info_file_name())
+            self.set_folder(folder)
             self.load()
-            self.subfolder = self.get_main_folder()\
-                                 .replace(os.environ["HOME"], "")\
-                                 .replace("/", " ")
+
         if data is not None:
             self.update(data)
 
@@ -65,6 +111,23 @@ class Document(object):
         """
         return self._folder
 
+    def set_folder(self, folder):
+        """Set document's folder. The info_file path will be accordingly set.
+
+        :param folder: Folder where the document will be stored, full path.
+        :type  folder: str
+        """
+        self._folder = folder
+        self._infoFilePath = os.path.join(
+            folder,
+            papis.utils.get_info_file_name()
+        )
+        self.subfolder = self.get_main_folder().replace(
+            os.environ["HOME"], ""
+        ).replace(
+            "/", " "
+        )
+
     def get_main_folder_name(self):
         """Get main folder name where the document and the information is
         stored.
@@ -94,6 +157,17 @@ class Document(object):
             else:
                 return True
 
+    def rm_file(self, filepath):
+        """Remove file from document, it also removes the entry in `files`
+
+        :filepath: Full file path for file
+        """
+        basename = os.path.basename(filepath)
+        if basename not in self['files']:
+            raise Exception("File %s not tracked by document" % basename)
+        os.remove(filepath)
+        self['files'].pop(self['files'].index(basename))
+
     def rm(self):
         """Removes document's folder, effectively removing it from the library.
         """
@@ -108,8 +182,21 @@ class Document(object):
         for key in self.keys():
             structure[key] = self[key]
         # self.logger.debug("Saving %s " % self.get_info_file())
-        yaml.dump(structure, fd, default_flow_style=False)
+        yaml.dump(
+            structure,
+            fd,
+            allow_unicode=papis.config.getboolean("info-allow-unicode"),
+            default_flow_style=False
+        )
         fd.close()
+
+    def to_json(self):
+        """Export information into a json string
+        :returns: Json formatted info file
+        :rtype:  str
+        """
+        import json
+        return json.dumps(self.to_dict())
 
     def to_dict(self):
         """Gets a python dictionary with the information of the document
@@ -186,7 +273,9 @@ N:{doc[last_name]};{doc[first_name]};;;""".format(doc=self)
         bibtexString += "@%s{%s,\n" % (bibtexType, ref)
         for bibKey in papis.bibtex.bibtex_keys:
             if bibKey in self.keys():
-                bibtexString += "\t%s = { %s },\n" % (bibKey, self[bibKey])
+                bibtexString += "  %s = { %s },\n" % (
+                    bibKey, papis.bibtex.unicode_to_latex(str(self[bibKey]))
+                )
         bibtexString += "}\n"
         return bibtexString
 
@@ -265,7 +354,7 @@ N:{doc[last_name]};{doc[first_name]};;;""".format(doc=self)
         # TODO: think about if it's better to raise an exception here
         # TODO: if no info file is found
         try:
-            fd = open(self._infoFilePath, "r")
+            fd = open(self.get_info_file(), "r")
         except:
             return False
         structure = yaml.load(fd)

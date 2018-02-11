@@ -1,4 +1,24 @@
+"""
+This command is useful if your library is itself a git repository.
+You can use this command to issue git commands in your library
+repository without having to change your current directory.
+
+Here are some examples of its usage:
+
+    - Check the status of the library repository:
+
+    .. code::
+
+        papis git status
+
+    - Commit all changes:
+
+    .. code::
+
+        papis git commit -a
+"""
 import papis.commands
+import argparse
 
 
 class Command(papis.commands.Command):
@@ -14,7 +34,7 @@ class Command(papis.commands.Command):
             "commands",
             help="Commands",
             default="",
-            nargs="+",
+            nargs=argparse.REMAINDER,
             action="store"
         )
 

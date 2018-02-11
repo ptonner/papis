@@ -1,5 +1,7 @@
 from subprocess import call
 import logging
+from itertools import count, product
+import itertools
 
 logger = logging.getLogger("utils")
 logger.debug("importing")
@@ -14,8 +16,7 @@ import papis.document
 import papis.crossref
 import papis.bibtex
 
-
-def general_open(fileName, key, default_opener="xdg-open", wait=False):
+def general_open(fileName, key, default_opener="xdg-open", wait=True):
     try:
         opener = papis.config.get(key)
     except KeyError:
@@ -26,7 +27,13 @@ def general_open(fileName, key, default_opener="xdg-open", wait=False):
         if wait:
             return os.system(" ".join([opener, fileName]))
         else:
-            return call([opener, fileName])
+            cmd = opener.split() + [fileName]
+            logger.debug("Open cmd %s" % cmd)
+            import subprocess
+            return subprocess.Popen(
+                cmd, shell=False,
+                stdin=None, stdout=None, stderr=None, close_fds=True
+            )
     elif hasattr(opener, '__call__'):
         return opener(fileName)
     else:
@@ -44,7 +51,7 @@ def get_regex_from_search(search):
     return r".*"+re.sub(r"\s+", ".*", search)
 
 
-def format_doc(python_format, document):
+def format_doc(python_format, document, key=""):
     """Construct a string using a pythonic format string and a document.
 
     :param python_format: Python-like format string.
@@ -56,8 +63,16 @@ def format_doc(python_format, document):
     :type  document: papis.document.Document
     :returns: Formated string
     :rtype: str
+    >>> import papis.document
+    >>> document = papis.document.Document(\
+            data=dict(author='Fulano', title='Something') \
+        )
+    >>> format_doc('{doc[author]}{doc[title]}', document)
+    'FulanoSomething'
+    >>> format_doc('{doc[author]}{doc[title]}{doc[blahblah]}', document)
+    'FulanoSomething'
     """
-    doc = papis.config.get("format-doc-name")
+    doc = key or papis.config.get("format-doc-name")
     return python_format.format(**{doc: document})
 
 
@@ -98,6 +113,30 @@ def get_folders(folder):
             folders.append(root)
     return folders
 
+def create_identifier(input_list):
+    """This creates a generator object capable of iterating over lists to
+    create combinations of that list that result in unique strings.
+    Ideally for use in modifying an existing string to make it unique.
+
+    Example: 
+    >>> m = create_identifier(string.ascii_lowercase) 
+    >>> next(m)
+    'a'
+    >>> import itertools, string
+    >>> list(itertools.islice(create_identifier(string.ascii_uppercase),30))
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD']
+
+    (`see <
+        https://stackoverflow.com/questions/14381940/
+        >`_)
+
+    :param input_list: list to iterate over
+    :type  input_list: list
+
+    """
+    for n in count(1):
+        for s in product(input_list, repeat=n):
+            yield ''.join(s)
 
 class DocMatcher(object):
     """This class implements the mini query language for papis.
@@ -174,7 +213,7 @@ class DocMatcher(object):
         cls.logger.debug('Parsing search')
         search = search or cls.search
         papis_alphas = pyparsing.printables.replace('=', '')
-        papis_key = pyparsing.Word(pyparsing.alphanums)
+        papis_key = pyparsing.Word(pyparsing.alphanums + '-')
         papis_value = pyparsing.QuotedString(
             quoteChar='"', escChar='\\', escQuote='\\'
         ) ^ pyparsing.QuotedString(
@@ -491,3 +530,84 @@ def git_commit(path="", message=""):
     logger.debug(cmd)
     message = '-m "%s"' % message if len(message) > 0 else ''
     call(cmd)
+
+
+def locate_document(document, documents):
+    """Try to figure out if a document is already within a list of documents.
+
+    :param document: Document to be searched for
+    :type  document: papis.document.Document
+    :param documents: Documents to search in
+    :type  documents: list
+    :returns: TODO
+
+    """
+    # if these keys exist in the documents, then check those first
+    for d in documents:
+        for key in ['doi', 'ref', 'isbn', 'isbn10', 'url']:
+            if key in document.keys() and key in d.keys():
+                if document[key] == d[key]:
+                    return d
+    # else, just try to match the usual way the documents
+    docs = filter_documents(
+        documents,
+        search='author = "{doc[author]}" title = "{doc[title]}"'.format(
+            doc=document
+        )
+    )
+    if len(docs) == 1:
+        return docs[0]
+    return None
+
+
+def file_is(file_description, fmt):
+    """Get if file stored in `file_path` is a `fmt` document.
+
+    :file_path: Full path for a `fmt` file or a buffer containing `fmt` data.
+    :returns: True if is `fmt` and False otherwise
+
+    """
+    import magic
+    logger.debug("Checking filetype")
+    if isinstance(file_description, str):
+        # This means that the file_description is a string
+        result = re.match(
+            r".*%s.*" % fmt, magic.from_file(file_description, mime=True),
+            re.IGNORECASE
+        )
+        if result:
+            logger.debug(
+                "File %s appears to be of type %s" % (file_description, fmt)
+            )
+    elif isinstance(file_description, bytes):
+        # Suppose that file_description is a buffer
+        result = re.match(
+            r".*%s.*" % fmt, magic.from_buffer(file_description, mime=True)
+        )
+        if result:
+            logger.debug(
+                "Buffer appears to be of type %s" % (fmt)
+            )
+    return True if result else False
+
+
+def is_pdf(file_description):
+    return file_is(file_description, 'pdf')
+
+
+def is_djvu(file_description):
+    return file_is(file_description, 'djvu')
+
+
+def is_epub(file_description):
+    return file_is(file_description, 'epub')
+
+
+def is_mobi(file_description):
+    return file_is(file_description, 'mobi')
+
+def guess_file_extension(file_description):
+    for ext in ["pdf", "djvu", "epub", "mobi"]:
+        if eval("is_%s" % ext)(file_description):
+            return ext
+    return "txt"

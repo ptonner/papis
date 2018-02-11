@@ -1,10 +1,15 @@
 #! /usr/bin/env bash
 # papis-short-help: Get pdf and bibtex from doi identificator
-# Copyright © 2017 Alejandro Gallo. GPLv3
+# Copyright 2017 Alejandro Gallo. GPLv3
+# Last modified Die Feb  6 14:48:31 CET 2018
 
 cat <<EOF
-                             WARNING NOTICE:
 ----------------------------------------------------------------------------
+
+                             WARNING NOTICE:
+papis-scihub v1.2.0
+----------------------------------------------------------------------------
+
 This script uses the platform SCI-HUB, which might be in conflict with local
 laws in your country. Use it at your own risk.
 
@@ -14,16 +19,61 @@ use the legally obtainable doi information included in papis
   papis add path/to/the/document --from-doi DOI_NUMBER
 
 ----------------------------------------------------------------------------
+
 EOF
 
+SCIHUB_POSSIBLE_DOMAIN_NAMES=(
+sci-hub.bz
+sci-hub.io
+sci-hub.cc
+sci-hub.ac
+sci-hub.tw
+sci-hub.biz
+sci-hub.la
+sci-hub.mn
+sci-hub.name
+sci-hub.tw
+sci-hub.tv
+sci-hub.hk
+sci-hub.is
+sci-hub.ws
+tree.sci-hub.la
+80.82.77.84
+80.82.77.83
+)
+
+SCIHUB_URL=""
 
 sciget(){
   link=$1
+  for domain in ${SCIHUB_POSSIBLE_DOMAIN_NAMES[@]} ; do
+    # ping one packet with two seconds of timeout
+    log "Trying ${domain}"
+    if ping -q -W 1 -c 1 ${domain} 2>&1 2> /dev/null; then
+      SCIHUB_URL="https://${domain}"
+      break
+    fi
+  done
   output_pdf=output.pdf
 
-  link="http://sci-hub.io/$link"
+  if [[ -z ${SCIHUB_URL} ]]; then
+    cat <<EOF
 
-  pdf_url="http:$(wget -O - ${link} | grep -Eom1 '//[^ ]+\.pdf')"
+    !!ALL URLS FOR SCIHUB THAT WE KNOW OF APPEAR TO BE DOWN!!
+    ${SCIHUB_POSSIBLE_DOMAIN_NAMES[@]}
+
+    Please consider opening an issue in https://github.com/alejandrogallo/papis
+    for this problem or editing in the script the SCIHUB_POSSIBLE_URLS
+    list variable.
+EOF
+    exit 1
+  else
+    log "Using SCIHUB URL ${SCIHUB_URL}"
+  fi
+
+  link="${SCIHUB_URL}/$link"
+
+  pdf_url="https:$(wget --no-check-certificate -q -O - ${link} | grep -Eom1 '//[^ ]+\.pdf')"
 
   echo
   log "link = ${link}"
@@ -48,7 +98,7 @@ sciget(){
 
 EOF
 
-wget ${pdf_url} -O ${output_pdf}
+wget -q --no-check-certificate ${pdf_url} -O ${output_pdf}
 browser=${BROWSER:-xdg-open}
 
 if ! file ${output_pdf} | grep PDF ; then
@@ -59,7 +109,7 @@ if ! file ${output_pdf} | grep PDF ; then
   echo
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     log "Downloading again ..."
-    wget ${pdf_url} -O ${output_pdf}
+    wget -q --no-check-certificate ${pdf_url} -O ${output_pdf}
     if ! file ${output_pdf} | grep PDF ; then
       log "There was a problem downloading the file"
       rm ${output_pdf}
@@ -79,7 +129,7 @@ log() {
 }
 
 if [[ $1 = "-h" ]]; then
-  echo "Get pdf and bibtex from doi identificator"
+  echo "Get pdf and bibtex from doi identificator or url containing doi"
   cat <<EOF
 Usage: papis scihub DOI <papis add flags>
 
@@ -87,6 +137,10 @@ Examples:
 ---------
 
   papis scihub 10.1002/andp.19053220607 -d einstein_papers --name photon_definition
+
+  papis scihub http://physicstoday.scitation.org/doi/10.1063/1.881498 --name important_paper
+
+  papis scihub https://doi.org/10.1016/j.physrep.2016.12.002
 EOF
   exit 0
 fi
@@ -107,5 +161,8 @@ if [[ ! $? = 0 ]]; then
 fi
 
 set -x
-papis ${PAPIS_VERBOSE} -l ${PAPIS_LIB} add ${pdf_output} --from-doi ${doi} $@
+papis ${PAPIS_VERBOSE} -l ${PAPIS_LIB} \
+  add ${pdf_output} \
+  --from-url ${doi} \
+  --from-doi ${doi} $@
 set +x

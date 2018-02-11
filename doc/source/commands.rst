@@ -28,6 +28,15 @@ Edit
     :prog: papis
     :path: edit
 
+Update
+------
+.. automodule:: papis.commands.update
+.. argparse::
+    :module: papis.commands
+    :func: init_and_return_parser
+    :prog: papis
+    :path: update
+
 Export
 ------
 .. automodule:: papis.commands.export
@@ -82,6 +91,24 @@ Browse
     :prog: papis
     :path: browse
 
+Config
+------
+.. automodule:: papis.commands.config
+.. argparse::
+    :module: papis.commands
+    :func: init_and_return_parser
+    :prog: papis
+    :path: config
+
+Run
+---
+.. automodule:: papis.commands.run
+.. argparse::
+    :module: papis.commands
+    :func: init_and_return_parser
+    :prog: papis
+    :path: run
+
 Git
 ---
 .. automodule:: papis.commands.git
@@ -90,3 +117,13 @@ Git
     :func: init_and_return_parser
     :prog: papis
     :path: git
+
+Sync
+----
+.. automodule:: papis.commands.sync
+.. argparse::
+    :module: papis.commands
+    :func: init_and_return_parser
+    :prog: papis
+    :path: sync
+
