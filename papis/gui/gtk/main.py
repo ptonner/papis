@@ -10,6 +10,11 @@ main_window_glade_file = os.path.join(
     "main.glade"
 )
 
+
+class Pick(Gtk.window):
+    pass
+
+
 class Gui(object):
 
     def __init__(self):
