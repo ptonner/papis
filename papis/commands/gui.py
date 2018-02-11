@@ -57,7 +57,7 @@ class Command(papis.commands.Command):
 
     def gtk_main(self):
         import papis.gui.gtk
-        return papis.gui.gtk.Gui().main(self.args)
+        return papis.gui.gtk.Gui()
 
     def vim_main(self):
         import papis.gui.vim

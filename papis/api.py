@@ -121,6 +121,10 @@ def pick(options, pick_config={}):
         import papis.gui.rofi
         logger.debug("Using rofi picker")
         return papis.gui.rofi.pick(options, **pick_config)
+    if picker == "gtk":
+        import papis.gui.gtk
+        logger.debug("Using gtk picker")
+        return papis.gui.gtk.pick(options, **pick_config)
     if picker == "dmenu":
         import papis.gui.dmenu
         logger.debug("Using dmenu picker")
