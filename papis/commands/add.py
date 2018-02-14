@@ -29,6 +29,7 @@ Examples
 
 """
 import papis
+from string import ascii_lowercase
 import os
 import sys
 import re
@@ -80,6 +81,13 @@ class Command(papis.commands.Command):
             help="Name for the document's folder (papis format)",
             default=papis.config.get('add-name'),
             action="store"
+        )
+
+        self.parser.add_argument(
+            "--file-name",
+            help="File name for the document (papis format)",
+            action="store",
+            default=None
         )
 
         self.parser.add_argument(
@@ -195,6 +203,30 @@ class Command(papis.commands.Command):
             help="Add entry without a document related to it",
             action="store_true"
         )
+
+    def get_file_name(self, data, original_filepath, suffix=""):
+        """Generates file name for the document
+
+        :param data: Data parsed for the actual document
+        :type  data: dict
+        :param original_filepath: The full path to the original file
+        :type  original_filepath: str
+        :param suffix: Possible suffix to be appended to the file withouth
+            its extension.
+        :type  suffix: str
+        :returns: New file name
+        :rtype:  str
+
+        """
+        if papis.config.get("file-name") is None:
+            filename = os.path.basename(original_filepath)
+        else:
+            filename = papis.utils.format_doc(
+                papis.config.get("file-name"), papis.document.from_data(data)
+            ) +\
+            ("-" + suffix if len(suffix) > 0 else "") +\
+            "." + papis.utils.guess_file_extension(original_filepath)
+        return filename
 
     def get_hash_folder(self, data, document_path):
         """Folder name where the document will be stored.
@@ -389,7 +421,7 @@ class Command(papis.commands.Command):
                 interactive=self.args.interactive
             )
             document.save()
-            data = document.to_dict()
+            data = papis.document.to_dict(document)
             in_documents_paths = document.get_files() + in_documents_paths
             data["files"] = [os.path.basename(f) for f in in_documents_paths]
             # set out folder name the folder of the found document
@@ -457,28 +489,41 @@ class Command(papis.commands.Command):
             self.logger.debug("Creating directory '%s'" % temp_dir)
             os.makedirs(temp_dir, mode=papis.config.getint('dir-umask'))
 
-        # Check if the user wants to edit before submitting the doc
-        # to the library
-        if self.args.edit:
-            document.update(
-                data, force=True, interactive=self.args.interactive
-            )
-            document.save()
-            self.logger.debug("Editing file before adding it")
-            papis.api.edit_file(document.get_info_file(), wait=True)
-            self.logger.debug("Loading the changes made by editing")
-            document.load()
-            data = document.to_dict()
 
         # First prepare everything in the temporary directory
+        g = papis.utils.create_identifier(ascii_lowercase)
+        string_append = ''
+        if self.args.file_name is not None: # Use args if set
+            papis.config.set("file-name", self.args.file_name)
+        new_file_list = []
         for i in range(min(len(in_documents_paths), len(data["files"]))):
             in_doc_name = data["files"][i]
             in_file_path = in_documents_paths[i]
             assert(os.path.exists(in_file_path))
+
+            # Rename the file in the staging area
+            new_filename = papis.utils.clean_document_name(
+                self.get_file_name(
+                    data,
+                    in_file_path,
+                    suffix=string_append
+                )
+            )
+            new_file_list.append(new_filename)
+
             endDocumentPath = os.path.join(
                 document.get_main_folder(),
-                in_doc_name
+                new_filename
             )
+            string_append = next(g)
+
+            # Check if the absolute file path is > 255 characters
+            if len(os.path.abspath(endDocumentPath)) >= 255:
+                self.logger.warning(
+                    'Length of absolute path is > 255 characters. '
+                    'This may cause some issues with some pdf viewers'
+                )
+
             if os.path.exists(endDocumentPath):
                 self.logger.debug(
                     "%s already exists, ignoring..." % endDocumentPath
@@ -491,13 +536,28 @@ class Command(papis.commands.Command):
                 )
                 shutil.copy(in_file_path, endDocumentPath)
 
+        data['files'] = new_file_list
+
+        # Check if the user wants to edit before submitting the doc
+        # to the library
+        if self.args.edit:
+            document.update(
+                data, force=True, interactive=self.args.interactive
+            )
+            document.save()
+            self.logger.debug("Editing file before adding it")
+            papis.api.edit_file(document.get_info_file(), wait=True)
+            self.logger.debug("Loading the changes made by editing")
+            document.load()
+            data = papis.document.to_dict(document)
+
         # Duplication checking
         self.logger.debug("Check if the added document is already existing")
         found_document = papis.utils.locate_document(
             document, papis.api.get_documents_in_lib(papis.api.get_lib())
         )
         if found_document is not None:
-            self.logger.warning('\n' + found_document.dump())
+            self.logger.warning('\n' + papis.document.dump(found_document))
             print("\n\n")
             self.logger.warning("DUPLICATION WARNING")
             self.logger.warning(
@@ -508,6 +568,7 @@ class Command(papis.commands.Command):
                 " the info."
             )
             self.args.confirm = True
+
 
         document.update(data, force=True)
         if self.get_args().open:
@@ -527,9 +588,10 @@ class Command(papis.commands.Command):
         # Let us chmod it because it might come from a temp folder
         # and temp folders are per default 0o600
         os.chmod(out_folder_path, papis.config.getint('dir-umask'))
-        papis.api.clear_lib_cache()
+        self.get_db().add(document)
         if self.args.commit and papis.utils.lib_is_git_repo(self.args.lib):
             subprocess.call(["git", "-C", out_folder_path, "add", "."])
             subprocess.call(
                 ["git", "-C", out_folder_path, "commit", "-m", "Add document"]
             )
+

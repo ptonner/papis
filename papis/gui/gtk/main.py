@@ -1,100 +1,179 @@
+import os
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
+from gi.repository import Gdk
 
-import papis.api
 
-class TreeViewFilterWindow(Gtk.Window):
+import re
+import papis.utils
+import papis.config
+import papis.database
+
+
+class ListElement(Gtk.Label):
+
+    def __init__(self, document):
+        Gtk.Label.__init__(self)
+        self.document = document
+        self.match_format = papis.utils.format_doc(
+            papis.config.get('match-format'), document
+        )
+        self.set_markup(
+            papis.utils.format_doc(
+                papis.config.get('header-format', section='rofi-gui'),
+                self.document
+            )
+        )
+        self.set_yalign(0.0)
+        self.set_xalign(0.0)
+        self.set_line_wrap(10.0)
+        self.set_properties('can-focus', True)
+        self.set_properties('has-focus', True)
+        self.set_properties('has-tooltip', True)
+        self.set_properties('tooltip-text', 'asf')
+        self.set_properties('focus-padding', 20)
+
+    def get_document(self):
+        return self.document
+
+    def get_match_format(self):
+        return self.match_format
+
+class ElementList(Gtk.ListBox):
 
     def __init__(self):
-        Gtk.Window.__init__(self, title="Papis GTK Gui")
-        self.fields = ['author', 'title', 'year']
-        self.fields = ['author', 'title', 'title']
-        self.documents = papis.api.get_documents_in_lib()
-        # self.documents = [("Firefox", 2002,  "C++"),
-                         # ("Eclipse", 2004, "Java" ),
-                         # ("Pitivi", 2004, "Python"),
-                         # ("Netbeans", 1996, "Java"),
-                         # ("Chrome", 2008, "C++"),
-                         # ("Filezilla", 2001, "C++"),
-                         # ("Bazaar", 2005, "Python"),
-                         # ("Git", 2005, "C"),
-                         # ("Linux Kernel", 1991, "C"),
-                         # ("GCC", 1987, "C"),
-                         # ("Frostwire", 2004, "Java")]
-        self.set_border_width(
-            papis.config.get('border-width', section='gtk-gui')
+        Gtk.ListBox.__init__(self)
+
+    def get_selected_index(self):
+        return self.get_selected_row().get_index()
+
+    def get_selected_document(self):
+        return self.get_selected_row().get_children()[0].get_document()
+
+
+class Gui(Gtk.Window):
+    def __init__(self, documents=[], header_filter=None):
+
+        Gtk.Window.__init__(self)
+        self.lines = 50
+        self.list_elements = []
+
+        self.db = papis.database.get()
+
+        self.set_decorated(False)
+        self.set_title('Papis gtk picker')
+
+        self.connect("key-press-event", self.handle_key)
+
+        self.entry = Gtk.Entry()
+        self.connect("key-release-event", self.handle_entry_key)
+        self.entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition(0),
+            'search'
+        )
+        self.entry.set_icon_tooltip_text(
+            Gtk.EntryIconPosition(0),
+            'Query input'
         )
 
-        #Setting up the self.grid in which the elements are to be positionned
-        self.grid = Gtk.Grid()
-        self.grid.set_column_homogeneous(True)
-        self.grid.set_row_homogeneous(True)
-        self.add(self.grid)
+        self.listbox = ElementList()
 
-        #Creating the ListStore model
-        self.documents_store = Gtk.ListStore(str, str, str)
-        for software_ref in self.documents:
-            self.documents_store.append(
-                [software_ref[field] for field in self.fields]
+        print('Vbox added')
+        vbox = Gtk.VBox()
+        vbox.add(self.entry)
+        s = Gtk.ScrolledWindow()
+        s.set_min_content_height(
+            self.get_screen().get_height() * self.lines / 100
+        )
+        s.set_max_content_height(
+            self.get_screen().get_height() * self.lines / 100
+        )
+        s.add(self.listbox)
+
+        def filtering(el):
+            m = el.get_children()[0].get_match_format()
+            return re.match(
+                '.*'+re.sub('  *', '\s*', self.entry.get_text()),
+                m,
+                re.I
             )
-        self.current_filter_language = None
 
-        #Creating the filter, feeding it with the liststore model
-        self.language_filter = self.documents_store.filter_new()
-        #setting the filter function, note that we're not using the
-        self.language_filter.set_visible_func(self.language_filter_func)
+        self.listbox.set_filter_func(filtering)
+        vbox.add(s)
 
-        #creating the treeview, making it use the filter as a model, and adding the columns
-        self.treeview = Gtk.TreeView.new_with_model(self.language_filter)
-        for i, column_title in enumerate(self.fields):
-            renderer = Gtk.CellRendererText()
-            column = Gtk.TreeViewColumn(column_title, renderer, text=i)
-            self.treeview.append_column(column)
 
-        #creating buttons to filter by programming language, and setting up their events
-        self.buttons = list()
-        for prog_language in ["Java", "C", "C++", "Python", "None"]:
-            button = Gtk.Button(prog_language)
-            self.buttons.append(button)
-            button.connect("clicked", self.on_selection_button_clicked)
+        self.add(vbox)
+        self.show_all()
+        self.move(0,0)
+        self.resize(
+            self.get_screen().get_width(),
+            2
+        )
 
-        #setting up the layout, putting the treeview in a scrollwindow, and the buttons in a row
-        self.scrollable_treelist = Gtk.ScrolledWindow()
-        self.scrollable_treelist.set_vexpand(True)
-        self.grid.attach(self.scrollable_treelist, 0, 0, 8, 10)
-        self.grid.attach_next_to(self.buttons[0], self.scrollable_treelist, Gtk.PositionType.BOTTOM, 1, 1)
-        for i, button in enumerate(self.buttons[1:]):
-            self.grid.attach_next_to(button, self.buttons[i], Gtk.PositionType.RIGHT, 1, 1)
-        self.scrollable_treelist.add(self.treeview)
+        if documents:
+            self.update_list(documents)
 
+        Gtk.main()
+
+    def get(self):
+        return self.listbox.get_selected_document()
+
+    def get_selected_document(self):
+        return self.listbox.get_selected_document()
+
+    def update_list(self, documents):
+        print('Creating ListElements')
+        self.list_elements = [
+            ListElement(doc) for doc in documents
+        ]
+        for el in self.list_elements:
+            self.listbox.add(el)
         self.show_all()
 
-    def language_filter_func(self, model, iter, data):
-        """Tests if the language in the row is the one in the filter"""
-        if self.current_filter_language is None or self.current_filter_language == "None":
-            return True
-        else:
-            return model[iter][2] == self.current_filter_language
+    def focus_filter_prompt(self):
+        self.entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition(0),
+            'search'
+        )
+        self.entry.grab_focus()
 
-    def on_selection_button_clicked(self, widget):
-        """Called on any of the button clicks"""
-        #we set the current language filter to the button's label
-        self.current_filter_language = widget.get_label()
-        print("%s language selected!" % self.current_filter_language)
-        #we update the filter, which updates in turn the view
-        self.language_filter.refilter()
+    def focus_query_prompt(self):
+        self.entry.set_icon_from_icon_name(
+            Gtk.EntryIconPosition(0),
+            'server'
+        )
+        self.entry.grab_focus()
+
+    def handle_entry_key(self, w, el):
+        print('entry')
+        self.listbox.invalidate_filter()
+
+    def handle_key(self, w, el):
+        print(el.get_keycode())
+        print(el.get_keyval())
+        print(el.string)
+        #enter
+        if el.get_keycode()[1] == 36:
+            doc = self.listbox.get_selected_document()
+            papis.document.open_in_browser(doc)
+        elif el.keyval== Gdk.keyval_from_name('c')\
+            and el.state == Gdk.CONTROL_MASK:
+            print('hello')
+        elif el.keyval == Gdk.keyval_from_name('c'):
+            print('just c')
+        # Escape
+        elif el.get_keycode()[1] == 9:
+            print('focusing')
+            self.focus_filter_prompt()
+        #elif el.get_keyval()[1] == ord(' '):
+        #    print('focusing')
+            #self.focus_query_prompt()
+        #elif el.get_keyval()[1] == ord('o'):
+        #    print(self.listbox.get_selected_row().get_children())
+        elif el.get_keyval()[1] == ord('q'):
+            Gtk.main_quit()
 
 
-class Gui(object):
-
-    def __init__(self):
-        self.args = None
-        self.win = None
-
-    def main(self, args):
-        self.args = args
-        self.win = TreeViewFilterWindow()
-        self.win.connect("delete-event", Gtk.main_quit)
-        self.win.show_all()
-        Gtk.main()
+def pick(options, header_filter=None, body_filter=None, match_filter=None):
+    return Gui(options, header_filter).get()

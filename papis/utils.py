@@ -1,5 +1,7 @@
 from subprocess import call
 import logging
+from itertools import count, product
+import itertools
 
 logger = logging.getLogger("utils")
 logger.debug("importing")
@@ -38,15 +40,6 @@ def general_open(fileName, key, default_opener="xdg-open", wait=True):
         raise Warning("How should I use the opener %s?" % opener)
 
 
-def get_regex_from_search(search):
-    """Creates a default regex from a search string.
-
-    :param search: A valid search string
-    :type  search: str
-    :returns: Regular expression
-    :rtype: str
-    """
-    return r".*"+re.sub(r"\s+", ".*", search)
 
 
 def format_doc(python_format, document, key=""):
@@ -61,29 +54,17 @@ def format_doc(python_format, document, key=""):
     :type  document: papis.document.Document
     :returns: Formated string
     :rtype: str
+    >>> import papis.document
+    >>> document = papis.document.Document(\
+            data=dict(author='Fulano', title='Something') \
+        )
+    >>> format_doc('{doc[author]}{doc[title]}', document)
+    'FulanoSomething'
+    >>> format_doc('{doc[author]}{doc[title]}{doc[blahblah]}', document)
+    'FulanoSomething'
     """
     doc = key or papis.config.get("format-doc-name")
     return python_format.format(**{doc: document})
-
-
-def match_document(document, search, match_format=None):
-    """Main function to match document to a given search.
-
-    :param document: Papis document
-    :type  document: papis.document.Document
-    :param search: A valid search string
-    :type  search: str
-    :param match_format: Python-like format string.
-        (`see <
-            https://docs.python.org/2/library/string.html#format-string-syntax
-        >`_)
-    :type  match_format: str
-    :returns: Non false if matches, true-ish if it does match.
-    """
-    match_format = match_format or papis.config.get("match-format")
-    match_string = format_doc(match_format, document)
-    regex = get_regex_from_search(search)
-    return re.match(regex, match_string, re.IGNORECASE)
 
 
 def get_folders(folder):
@@ -103,195 +84,30 @@ def get_folders(folder):
             folders.append(root)
     return folders
 
+def create_identifier(input_list):
+    """This creates a generator object capable of iterating over lists to
+    create combinations of that list that result in unique strings.
+    Ideally for use in modifying an existing string to make it unique.
 
-class DocMatcher(object):
-    """This class implements the mini query language for papis.
-    All its methods are static, it could be also implemented as a separate
-    module.
+    Example: 
+    >>> m = create_identifier(string.ascii_lowercase) 
+    >>> next(m)
+    'a'
+    >>> import itertools, string
+    >>> list(itertools.islice(create_identifier(string.ascii_uppercase),30))
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD']
 
-    The static methods are to be used as follows:
-    First the search string has to be set,
-        DocMatcher.set_search(search_string)
-    and then the parse method should be called in order to decypher the
-    search_string,
-        DocMatcher.parse()
-    Now the DocMatcher is ready to match documents with the input query
-    via the `return_if_match` method, which is used to parallelize the
-    matching.
-    """
-    import papis.config
-    search = ""
-    parsed_search = None
-    doc_format = '{' + papis.config.get('format-doc-name') + '[DOC_KEY]}'
-    logger = logging.getLogger('DocMatcher')
+    (`see <
+        https://stackoverflow.com/questions/14381940/
+        >`_)
 
-    @classmethod
-    def return_if_match(cls, doc):
-        """Use the attribute `cls.parsed_search` to match the `doc` document
-        to the previously parsed query.
-        :param doc: Papis document to match against.
-        :type  doc: papis.document.Document
-        :returns: True if it matches, False if some query requirement does
-            not match.
-        """
-        match = None
-        for parsed in cls.parsed_search:
-            if len(parsed) == 1:
-                search = parsed[0]
-                sformat = None
-            elif len(parsed) == 3:
-                search = parsed[2]
-                sformat = cls.doc_format.replace('DOC_KEY',parsed[0])
-            match = doc if papis.utils.match_document(
-                doc, search, match_format=sformat) else None
-            if not match:
-                break
-        return match
-
-    @classmethod
-    def set_search(cls, search):
-        cls.search = search
-
-    @classmethod
-    def parse(cls, search=False):
-        """Parse the main query text. This method will also set the
-        class attribute `parsed_search` to the parsed query, and it will
-        return it too.
-        :param cls: The class object, since it is a static method
-        :type  cls: object
-        :param search: Search text string if a custom search string is to be
-            used. False if the `cls.search` class attribute is to be used.
-        :type  search: str
-        :returns: Parsed query
-        :rtype:  list
-        >>> print(DocMatcher.parse('hello author = einstein'))
-        [['hello'], ['author', '=', 'einstein']]
-        >>> print(DocMatcher.parse(''))
-        []
-        >>> print(\
-            DocMatcher.parse(\
-                '"hello world whatever =" tags = \\\'hello ====\\\''))
-        [['hello world whatever ='], ['tags', '=', 'hello ====']]
-        >>> print(DocMatcher.parse('hello'))
-        [['hello']]
-        """
-        import pyparsing
-        cls.logger.debug('Parsing search')
-        search = search or cls.search
-        papis_alphas = pyparsing.printables.replace('=', '')
-        papis_key = pyparsing.Word(pyparsing.alphanums + '-')
-        papis_value = pyparsing.QuotedString(
-            quoteChar='"', escChar='\\', escQuote='\\'
-        ) ^ pyparsing.QuotedString(
-            quoteChar="'", escChar='\\', escQuote='\\'
-        ) ^ papis_key
-        equal = pyparsing.ZeroOrMore(" ") + \
-                pyparsing.Literal('=')    + \
-                pyparsing.ZeroOrMore(" ")
-
-        papis_query = pyparsing.ZeroOrMore(
-            pyparsing.Group(
-                pyparsing.ZeroOrMore(
-                    papis_key + equal
-                ) + papis_value
-            )
-        )
-        parsed = papis_query.parseString(search)
-        cls.logger.debug('Parsed search = %s' % parsed)
-        cls.parsed_search = parsed
-        return cls.parsed_search
-
-
-
-def filter_documents(documents, search=""):
-    """Filter documents. It can be done in a multi core way.
-
-    :param documents: List of papis documents.
-    :type  documents: papis.documents.Document
-    :param search: Valid papis search string.
-    :type  search: str
-    :returns: List of filtered documents
-    :rtype:  list
+    :param input_list: list to iterate over
+    :type  input_list: list
 
     """
-    logger = logging.getLogger('filter')
-    papis.utils.DocMatcher.set_search(search)
-    papis.utils.DocMatcher.parse()
-    if search == "" or search == ".":
-        return documents
-    else:
-        # Doing this multiprocessing in filtering does not seem
-        # to help much, I don't know if it's because I'm doing something
-        # wrong or it is really like this.
-        import multiprocessing
-        import time
-        np = papis.api.get_arg("cores", multiprocessing.cpu_count())
-        pool = multiprocessing.Pool(np)
-        logger.debug(
-            "Filtering docs (search %s) using %s cores" % (
-                search,
-                np
-            )
-        )
-        logger.debug("pool started")
-        begin_t = time.time()
-        result = pool.map(
-            papis.utils.DocMatcher.return_if_match, documents
-        )
-        pool.close()
-        pool.join()
-        logger.debug("pool done (%s ms)" % (1000*time.time()-1000*begin_t))
-        return [d for d in result if d is not None]
-
-
-def get_documents(directory, search=""):
-    """Get documents from within a containing folder
-
-    :param directory: Folder to look for documents.
-    :type  directory: str
-    :param search: Valid papis search
-    :type  search: str
-    :returns: List of document objects.
-    :rtype: list
-    """
-    import papis.config
-    directory = os.path.expanduser(directory)
-
-    if papis.config.getboolean("use-cache"):
-        import papis.cache
-        folders = papis.cache.get_folders(directory)
-    else:
-        folders = get_folders()
-
-    logger.debug("Creating document objects")
-    documents = folders_to_documents(folders)
-    logger.debug("Done")
-
-    return filter_documents(documents, search)
-
-
-def folders_to_documents(folders):
-    """Turn folders into documents, this is done in a multiprocessing way, this
-    step is quite critical for performance.
-
-    :param folders: List of folder paths.
-    :type  folders: list
-    :returns: List of document objects.
-    :rtype:  list
-    """
-    import multiprocessing
-    import time
-    logger = logging.getLogger("dir2doc")
-    np = papis.api.get_arg("cores", multiprocessing.cpu_count())
-    logger.debug("Running in %s cores" % np)
-    pool = multiprocessing.Pool(np)
-    logger.debug("pool started")
-    begin_t = time.time()
-    result = pool.map(papis.document.Document, folders)
-    pool.close()
-    pool.join()
-    logger.debug("pool done (%s ms)" % (1000*time.time()-1000*begin_t))
-    return result
+    for n in count(1):
+        for s in product(input_list, repeat=n):
+            yield ''.join(s)
 
 
 def folder_is_git_repo(folder):
@@ -508,12 +324,16 @@ def locate_document(document, documents):
     :returns: TODO
 
     """
+    # if these keys exist in the documents, then check those first
     for d in documents:
         for key in ['doi', 'ref', 'isbn', 'isbn10', 'url']:
-            if 'doi' in document.keys() and 'doi' in d.keys():
-                if document['doi'] == d['doi']:
+            if key in document.keys() and key in d.keys():
+                if document[key] == d[key]:
                     return d
-    docs = filter_documents(
+    # else, just try to match the usual way the documents
+    # TODO: put this into the databases
+    import papis.database.cache
+    docs = papis.database.cache.filter_documents(
         documents,
         search='author = "{doc[author]}" title = "{doc[title]}"'.format(
             doc=document
@@ -533,17 +353,17 @@ def file_is(file_description, fmt):
     """
     import magic
     logger.debug("Checking filetype")
-    try:
+    if isinstance(file_description, str):
         # This means that the file_description is a string
-        file_description.decode('utf-8')
         result = re.match(
-            r".*%s.*" % fmt, magic.from_file(file_description, mime=True)
+            r".*%s.*" % fmt, magic.from_file(file_description, mime=True),
+            re.IGNORECASE
         )
         if result:
             logger.debug(
                 "File %s appears to be of type %s" % (file_description, fmt)
             )
-    except:
+    elif isinstance(file_description, bytes):
         # Suppose that file_description is a buffer
         result = re.match(
             r".*%s.*" % fmt, magic.from_buffer(file_description, mime=True)
@@ -569,3 +389,9 @@ def is_epub(file_description):
 
 def is_mobi(file_description):
     return file_is(file_description, 'mobi')
+
+def guess_file_extension(file_description):
+    for ext in ["pdf", "djvu", "epub", "mobi"]:
+        if eval("is_%s" % ext)(file_description):
+            return ext
+    return "txt"

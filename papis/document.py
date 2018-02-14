@@ -5,6 +5,146 @@ import papis.utils
 import papis.config
 import papis.bibtex
 
+import logging
+logger = logging.getLogger("document")
+
+def open_in_browser(document):
+    """Browse document's url whenever possible.
+
+    :document: Document object
+
+    """
+    global logger
+    url = None
+    if "url" in document.keys():
+        url = document["url"]
+    elif 'doi' in document.keys():
+        url = 'https://doi.org/' + document['doi']
+    elif papis.config.get('doc-url-key-name') in document.keys():
+        url = document[papis.config.get('doc-url-key-name')]
+    else:
+        from urllib.parse import urlencode
+        params = {
+            'q': papis.utils.format_doc(
+                papis.config.get('browse-query-format'),
+                document
+            )
+        }
+        url = papis.config.get('search-engine') + '/?' + urlencode(params)
+
+    if url is None:
+        logger.warning(
+            "No url for %s possible" % (document.get_main_folder_name())
+        )
+    else:
+        logger.debug("Opening url %s:" % url)
+        papis.utils.general_open(
+            url, "browser", wait=False
+        )
+
+
+def from_folder(folder_path):
+    """Construct a document object from a folder
+
+    :param folder_path: Full path to a valid papis folder
+    :type  folder_path: str
+    :returns: A papis document
+    :rtype:  papis.document.Document
+    """
+    return papis.document.Document(folder=folder_path)
+
+
+def from_data(data):
+    """Construct a document object from a data dictionary.
+
+    :param data: Data to be copied to a new document
+    :type  data: dict
+    :returns: A papis document
+    :rtype:  papis.document.Document
+    """
+    return papis.document.Document(data=data)
+
+
+def to_bibtex(document):
+    """Create a bibtex string from document's information
+
+    :param document: Papis document
+    :type  document: Document
+    :returns: String containing bibtex formating
+    :rtype:  str
+    """
+    bibtexString = ""
+    bibtexType = ""
+    # First the type, article ....
+    if "type" in document.keys():
+        if document["type"] in papis.bibtex.bibtex_types:
+            bibtexType = document["type"]
+    if not bibtexType:
+        bibtexType = "article"
+    if not document["ref"]:
+        ref = os.path.basename(document.get_main_folder())
+    else:
+        ref = document["ref"]
+    bibtexString += "@%s{%s,\n" % (bibtexType, ref)
+    for bibKey in papis.bibtex.bibtex_keys:
+        if bibKey in document.keys():
+            bibtexString += "  %s = { %s },\n" % (
+                bibKey, papis.bibtex.unicode_to_latex(str(document[bibKey]))
+            )
+    bibtexString += "}\n"
+    return bibtexString
+
+
+def to_json(document):
+    """Export information into a json string
+    :param document: Papis document
+    :type  document: Document
+    :returns: Json formatted info file
+    :rtype:  str
+    """
+    import json
+    return json.dumps(to_dict(document))
+
+
+def to_dict(document):
+    """Gets a python dictionary with the information of the document
+    :param document: Papis document
+    :type  document: Document
+    :returns: Python dictionary
+    :rtype:  dict
+    """
+    result = dict()
+    for key in document.keys():
+        result[key] = document[key]
+    return result
+
+
+def dump(document):
+    """Return information string without any obvious format
+    :param document: Papis document
+    :type  document: Document
+    :returns: String with document's information
+    :rtype:  str
+
+    """
+    string = ""
+    for i in document.keys():
+        string += str(i)+":   "+str(document[i])+"\n"
+    return string
+
+
+def delete(document):
+    """This function deletes a document from disk and from the database,
+    effectively deleting completely the document.
+    :param document: Papis document
+    :type  document: papis.document.Document
+    """
+    import shutil
+    db = papis.database.get()
+    folder = document.get_main_folder()
+    shutil.rmtree(folder)
+    db.delete(document)
+
 
 class Document(object):
 
@@ -17,14 +157,12 @@ class Document(object):
 
     def __init__(self, folder=None, data=None):
         self._keys = []
-        self._folder = folder
+        self._folder = None
+
         if folder is not None:
-            self._infoFilePath = \
-                os.path.join(folder, papis.utils.get_info_file_name())
+            self.set_folder(folder)
             self.load()
-            self.subfolder = self.get_main_folder()\
-                                 .replace(os.environ["HOME"], "")\
-                                 .replace("/", " ")
+
         if data is not None:
             self.update(data)
 
@@ -64,6 +202,23 @@ class Document(object):
         :returns: Folder path
         """
         return self._folder
+
+    def set_folder(self, folder):
+        """Set document's folder. The info_file path will be accordingly set.
+
+        :param folder: Folder where the document will be stored, full path.
+        :type  folder: str
+        """
+        self._folder = folder
+        self._infoFilePath = os.path.join(
+            folder,
+            papis.utils.get_info_file_name()
+        )
+        self.subfolder = self.get_main_folder().replace(
+            os.environ["HOME"], ""
+        ).replace(
+            "/", " "
+        )
 
     def get_main_folder_name(self):
         """Get main folder name where the document and the information is
@@ -127,92 +282,6 @@ class Document(object):
         )
         fd.close()
 
-    def to_json(self):
-        """Export information into a json string
-        :returns: Json formatted info file
-        :rtype:  str
-        """
-        import json
-        return json.dumps(self.to_dict())
-
-    def to_dict(self):
-        """Gets a python dictionary with the information of the document
-        :returns: Python dictionary
-        :rtype:  dict
-        """
-        result = dict()
-        for key in self.keys():
-            result[key] = self[key]
-        return result
-
-    @classmethod
-    def get_vcf_template(cls):
-        return """\
-first_name: null
-last_name: null
-org:
-- null
-email:
-    work: null
-    home: null
-tel:
-    cell: null
-    work: null
-    home: null
-adress:
-    work: null
-    home: null"""
-
-    def to_vcf(self):
-        # TODO: Generalize using the doc variable.
-        if not papis.config.in_mode("contact"):
-            # self.logger.error("Not in contact mode")
-            sys.exit(1)
-        text = \
-            """\
-BEGIN:VCARD
-VERSION:4.0
-FN:{doc[first_name]} {doc[last_name]}
-N:{doc[last_name]};{doc[first_name]};;;""".format(doc=self)
-        for contact_type in ["email", "tel"]:
-            text += "\n"
-            text += "\n".join([
-                "{contact_type};TYPE={type}:{tel}"\
-                .format(
-                    contact_type=contact_type.upper(),
-                    type=t.upper(),
-                    tel=self[contact_type][t]
-                    )
-                for t in self[contact_type].keys() \
-                if self[contact_type][t] is not None
-            ])
-        text += "\n"
-        text += "END:VCARD"
-        return text
-
-    def to_bibtex(self):
-        """Create a bibtex string from document's information
-        :returns: String containing bibtex formating
-        :rtype:  str
-        """
-        bibtexString = ""
-        bibtexType = ""
-        # First the type, article ....
-        if "type" in self.keys():
-            if self["type"] in papis.bibtex.bibtex_types:
-                bibtexType = self["type"]
-        if not bibtexType:
-            bibtexType = "article"
-        if not self["ref"]:
-            ref = os.path.basename(self.get_main_folder())
-        else:
-            ref = self["ref"]
-        bibtexString += "@%s{%s,\n" % (bibtexType, ref)
-        for bibKey in papis.bibtex.bibtex_keys:
-            if bibKey in self.keys():
-                bibtexString += "\t%s = { %s },\n" % (bibKey, self[bibKey])
-        bibtexString += "}\n"
-        return bibtexString
 
     def update(self, data, force=False, interactive=False):
         """Update document's information from an info dictionary.
@@ -271,17 +340,6 @@ N:{doc[last_name]};{doc[first_name]};;;""".format(doc=self)
         """
         return self._keys
 
-    def dump(self):
-        """Return information string without any obvious format
-        :returns: String with document's information
-        :rtype:  str
-
-        """
-        string = ""
-        for i in self.keys():
-            string += str(i)+":   "+str(self[i])+"\n"
-        return string
-
     def load(self):
         """Load information from info file
         """
@@ -289,7 +347,7 @@ N:{doc[last_name]};{doc[first_name]};;;""".format(doc=self)
         # TODO: think about if it's better to raise an exception here
         # TODO: if no info file is found
         try:
-            fd = open(self._infoFilePath, "r")
+            fd = open(self.get_info_file(), "r")
         except:
             return False
         structure = yaml.load(fd)

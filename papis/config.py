@@ -1,5 +1,4 @@
-"""
-General
+"""General
 *******
 
 .. papis-config:: local-config-file
@@ -45,6 +44,7 @@ General
         - papis.pick
         - rofi
         - vim
+        - dmenu
 
 .. papis-config:: mvtool
 
@@ -88,6 +88,7 @@ General
     Some commands will issue git commands if this option is set to ``True``.
     For example in ``mv`` or ``rename``.
 
+
 .. papis-config:: add-confirm
 
     If set to ``True``, everytime you run ``papis add``
@@ -100,6 +101,11 @@ General
     Default name for newly added documents. For example, if you want
     your documents to be ``author-title`` then you should set it to
     the papis format: ``{doc[author]}-{doc[title]}``.
+
+.. papis-config:: file-name
+
+    Same as ``add-name``, but for files, not folders. If it is not set,
+    the names of the files will be cleaned and taken `as-is`.
 
 .. papis-config:: add-interactive
 
@@ -280,6 +286,26 @@ General
 
     The default behaviour is to set the doi as the ref.
 
+.. papis-config:: multiple-authors-format
+
+    When retrieving automatic author information from services like
+    crossref.org, papis usually builds the ``author`` field for the
+    given document. The format how every single author name is built
+    is given by this setting, for instance you could customize it
+    by the following:
+
+        ``multiple-authors-format = {au[surname]} -- {au[given_name]}``
+
+    which would given in the case of Albert Einstein the string
+    ``Einstein -- Albert``.
+
+.. papis-config:: multiple-authors-separator
+
+    Similarly to ``multiple-authors-format``, this is the string that
+    separates single authors in the ``author`` field. If it is set to
+    `` and `` then you would have ``<author 1> and <author 2> and ....``
+    in the ``author`` field.
+
 """
 import logging
 
@@ -330,14 +356,12 @@ general_settings = {
     "sync-command"    : "git -C {lib[dir]} pull origin master",
     "notes-name"      : "notes.tex",
     "use-cache"       : True,
-    "cache-dir"       : \
-        os.path.join(os.environ.get('XDG_CACHE_HOME'), 'papis') if
-        os.environ.get('XDG_CACHE_HOME') else \
-        os.path.join(os.path.expanduser('~'), '.cache', 'papis'),
+    "cache-dir"       : None,
     "use-git"         : False,
 
     "add-confirm"     : False,
     "add-name"        : "",
+    "file-name"       : None,
     "add-interactive" : False,
     "add-edit"        : False,
     "add-open"        : False,
@@ -374,6 +398,8 @@ general_settings = {
 
     "info-allow-unicode": True,
     "ref-format"      : "{doc[doi]}",
+    "multiple-authors-separator": " and ",
+    "multiple-authors-format": "{au[surname]}, {au[given_name]}",
 }
 
 
@@ -437,12 +463,22 @@ def get_config_home():
 
     :returns: Configuration base directory
     :rtype:  str
+    >>> import os; os.environ['XDG_CONFIG_HOME'] = '/tmp'
+    >>> get_config_home()
+    '/tmp'
     """
-    return os.environ.get('XDG_CONFIG_HOME') or \
-        os.path.join(os.path.expanduser('~'), '.config')
+    return os.environ.get('XDG_CONFIG_HOME') or os.path.join(
+        os.path.expanduser('~'), '.config'
+    )
 
 
 def get_config_dirs():
+    """
+    >>> import os; os.environ['XDG_CONFIG_DIRS'] = ''
+    >>> os.environ['XDG_CONFIG_HOME'] = '/tmp'
+    >>> get_config_dirs()
+    ['/tmp/papis', ...]
+    """
     dirs = []
     if os.environ.get('XDG_CONFIG_DIRS'):
         # get_config_home should also be included on top of XDG_CONFIG_DIRS
@@ -464,6 +500,12 @@ def get_config_folder():
     e.g. ``/home/user/.papis``. It is XDG compatible, which means that if the
     environment variable ``XDG_CONFIG_HOME`` is defined it will use the
     configuration folder ``XDG_CONFIG_HOME/papis`` instead.
+
+    >>> import os; os.environ['XDG_CONFIG_HOME'] = '/tmp'
+    >>> newpath = os.path.join(os.environ['XDG_CONFIG_HOME'], 'papis')
+    >>> if not os.path.exists(newpath): os.mkdir(newpath)
+    >>> get_config_folder()
+    '/tmp/papis'
     """
     config_dirs = get_config_dirs()
     for config_dir in config_dirs:
@@ -476,6 +518,12 @@ def get_config_folder():
 def get_config_file():
     """Get the path of the main configuration file,
     e.g. /home/user/.papis/config
+
+    >>> import os; os.environ['XDG_CONFIG_HOME'] = '/tmp'
+    >>> newpath = os.path.join(os.environ['XDG_CONFIG_HOME'], 'papis')
+    >>> if not os.path.exists(newpath): os.mkdir(newpath)
+    >>> get_config_file()
+    '/tmp/papis/config'
     """
     global OVERRIDE_VARS
     if OVERRIDE_VARS["file"] is not None:
@@ -658,6 +706,41 @@ def merge_configuration_from_path(path, configuration):
         configuration.read(path)
         configuration.handle_includes()
 
+
+def set_lib(library):
+    """Set library, notice that in principle library can be a full path.
+
+    :param library: Library name or path to a papis library
+    :type  library: str
+
+    >>> import os
+    >>> if not os.path.exists('/tmp/setlib-test'): os.makedirs(\
+            '/tmp/setlib-test'\
+        )
+    >>> set_lib('/tmp/setlib-test')
+    >>> get_lib()
+    '/tmp/setlib-test'
+    >>> set_lib('non-existing-library')
+    1
+    """
+    config = get_configuration()
+    if library not in config.keys():
+        if os.path.exists(library):
+            # Check if the path exists, then use this path as a new library
+            logger.debug("Using library %s" % library)
+            config[library] = dict(dir=library)
+        else:
+            logger.error(
+                "Path or library '%s' does not seem to exist" % library
+            )
+            return 1
+    try:
+        args = papis.commands.get_args()
+        args.lib = library
+    except AttributeError:
+        os.environ["PAPIS_LIB"] = library
+
+
 def get_lib():
     """Get current library, it either retrieves the library from
     the environment PAPIS_LIB variable or from the command line
@@ -665,9 +748,9 @@ def get_lib():
 
     :param library: Name of library or path to a given library
     :type  library: str
-    >>> papis.api.set_lib('hello-world')
+    >>> set_lib('papers')
     >>> get_lib()
-    'hello-world'
+    'papers'
     """
     import papis.commands
     try:
