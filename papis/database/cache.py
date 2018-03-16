@@ -314,6 +314,12 @@ class Database(papis.database.base.Database):
         self.logger.debug('Initializing')
         self.documents = []
         self.folders = []
+        self.initialize()
+
+    def get_backend_name(self):
+        return 'papis'
+
+    def initialize(self):
         self.get_documents()
 
     def get_documents(self):
@@ -330,9 +336,8 @@ class Database(papis.database.base.Database):
 
     def add(self, document):
         self.logger.debug('Adding in the library')
-        self.logger.debug(len(self.folders))
         self.folders.append(document.get_main_folder())
-        self.logger.debug(len(self.folders))
+        self.documents.append(document)
         self.save()
 
     def update(self, document):
@@ -343,6 +348,8 @@ class Database(papis.database.base.Database):
             self.logger.debug('Deleting from folders')
             self.folders.remove(document.get_main_folder())
             self.save()
+            # Also update the documents list
+            self.get_documents()
 
     def match(self, document, query_string):
         return match_document(document, query_string)
@@ -351,11 +358,20 @@ class Database(papis.database.base.Database):
         self.logger.debug('Clearing library')
         clear_lib_cache(self.get_lib())
 
+    def query_dict(self, dictionary):
+        query_string = " ".join(
+            ["{}=\"{}\" ".format(key, val) for key,val in dictionary.items()]
+        )
+        return self.query(query_string)
+
     def query(self, query_string):
         self.logger.debug('Querying')
         if len(self.documents) == 0:
             self.get_documents()
         return filter_documents(self.documents, query_string)
+
+    def get_all_documents(self):
+        return self.query(".")
 
     def save(self):
         self.logger.debug('Saving in the library')

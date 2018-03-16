@@ -1,7 +1,6 @@
 from subprocess import call
 import logging
 from itertools import count, product
-import itertools
 
 logger = logging.getLogger("utils")
 logger.debug("importing")
@@ -15,6 +14,7 @@ import papis.commands
 import papis.document
 import papis.crossref
 import papis.bibtex
+
 
 def general_open(fileName, key, default_opener="xdg-open", wait=True):
     try:
@@ -84,13 +84,14 @@ def get_folders(folder):
             folders.append(root)
     return folders
 
+
 def create_identifier(input_list):
     """This creates a generator object capable of iterating over lists to
     create combinations of that list that result in unique strings.
     Ideally for use in modifying an existing string to make it unique.
 
-    Example: 
-    >>> m = create_identifier(string.ascii_lowercase) 
+    Example:
+    >>> m = create_identifier(string.ascii_lowercase)
     >>> next(m)
     'a'
     >>> import itertools, string
@@ -282,7 +283,7 @@ def clean_document_name(doc_path):
     logger.debug("Cleaning document name %s " % base)
     trans_dict = dict.fromkeys(
         string.punctuation.translate(
-          str.maketrans(dict.fromkeys('.-_'))
+            str.maketrans(dict.fromkeys('.-_'))
         )
     )
     translation = str.maketrans(trans_dict)
@@ -389,6 +390,7 @@ def is_epub(file_description):
 
 def is_mobi(file_description):
     return file_is(file_description, 'mobi')
+
 
 def guess_file_extension(file_description):
     for ext in ["pdf", "djvu", "epub", "mobi"]:

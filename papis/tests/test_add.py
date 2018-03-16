@@ -1,68 +1,89 @@
-import unittest
-import logging
-import papis.commands
-import papis.config
 import os
-
-logging.basicConfig(level=logging.DEBUG)
-
-
-class CommandTest(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(self, args=[]):
-        try:
-            papis.commands.init()
-        except:
-            pass
+import tempfile
+import unittest
+import papis.tests
+import papis.config
+from papis.commands.add import run
 
 
-class TestAdd(CommandTest):
+class Test(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        super(self, self).setUpClass()
-        self.args = dict()
-        self.command = papis.commands.get_commands()["add"]
-        self.config_path = os.path.join(
-            os.path.dirname(__file__),
-            "resources",
-            "config_1.ini"
-        )
-        # papis.config.set_config_file(self.config_path)
-        # papis.commands.Command.config = papis.config.reset_configuration()
-        # self.papers_dir = papis.config.get_configuration()["papers"]["dir"]
+        papis.tests.setup_test_library()
 
-    @classmethod
-    def tearDownClass(self):
-        pass
-
-    def test_existence(self):
-        self.assertTrue(self.command is not None)
-
-    def test_config_file_exists(self):
-        self.assertTrue(os.path.exists(self.config_path))
-
-    def test_help_message(self):
-        # TODO: Check if thread returns succesfully or not
-        import threading
-        args = ("add", "-h")
-        t = threading.Thread(
-            target=papis.commands.main,
-            args=[args]
-        )
-        t.start()
-        t.join()
-        self.assertFalse(t.isAlive())
-
-    def test_extension(self):
-        docs = [
-            ["blahblah.pdf", "pdf"],
-            ["b.lahblah.pdf", "pdf"],
-            ["no/extension/blahblah", "txt"],
-            ["a/asdfsdf21/blahblah.epub", "epub"],
-        ]
-        for d in docs:
-            self.assertTrue(
-                self.command.get_document_extension(d[0]) == d[1]
+    def test_nofile_exception(self):
+        path = tempfile.mktemp()
+        self.assertTrue(not os.path.exists(path))
+        try:
+            run(
+                [path],
+                data=dict(author='Bohm', title='My effect')
             )
+            self.assertTrue(False)
+        except IOError:
+            self.assertTrue(True)
+
+    def test_add_with_data(self):
+        data = {
+            "journal": "International Journal of Quantum Chemistry",
+            "language": "en",
+            "issue": "15",
+            "title": "How many-body perturbation theory has changed qm ",
+            "url": "http://doi.wiley.com/10.1002/qua.22384",
+            "volume": "109",
+            "author": "Kutzelnigg, Werner",
+            "type": "article",
+            "doi": "10.1002/qua.22384",
+            "year": "2009",
+            "ref": "2FJT2E3A"
+        }
+        number_of_files = 10
+        paths = [
+            tempfile.mktemp() for i in range(number_of_files)
+        ]
+        for p in paths:
+            open(p, 'w+').close()
+        run(
+            paths,
+            data=data
+        )
+        db = papis.database.get()
+        docs = db.query_dict(dict(author="Kutzelnigg, Werner"))
+        self.assertTrue(len(docs) == 1)
+        doc = docs[0]
+        self.assertTrue(doc is not None)
+        self.assertTrue(len(doc.get_files()) == number_of_files)
+
+    def test_with_bibtex(self):
+        bibstring = """
+            @article{10.1002/andp.19053221004,
+              author = { A. Einstein },
+              doi = { 10.1002/andp.19053221004 },
+              issue = { 10 },
+              journal = { Ann. Phys. },
+              pages = { 891--921 },
+              title = { Zur Elektrodynamik bewegter K\"{o}rper },
+              type = { article },
+              volume = { 322 },
+              year = { 1905 },
+            }
+        """
+        bibfile = tempfile.mktemp()
+        with open(bibfile, 'w+') as fd:
+            fd.write(bibstring)
+        run(
+            [bibfile],
+            from_bibtex=bibfile
+        )
+        db = papis.database.get()
+        docs = db.query_dict(
+            dict(
+                author="einstein",
+                title="Elektrodynamik bewegter"
+            )
+        )
+        self.assertTrue(len(docs) == 1)
+        doc = docs[0]
+        self.assertTrue(doc is not None)
+        self.assertTrue(len(doc.get_files()) == 1)

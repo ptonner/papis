@@ -70,7 +70,7 @@ class Command(papis.commands.Command):
 
     def parse_search(self):
         import papis.docmatcher
-        key_vals = papis.docmatcher.DocMatcher.parse(self.args.search)
+        key_vals = papis.docmatcher.parse_query(self.args.search)
         result = {'query': ""}
         self.logger.debug('Parsed set %s' % key_vals)
         for pair in key_vals:
@@ -85,7 +85,7 @@ class Command(papis.commands.Command):
 
     def add(self, doc):
         if self.args.libgen:
-            if not 'doc_url' in doc.keys():
+            if not doc.has('doc_url'):
                 self.logger.error('No doc_url data retrieved')
                 return 1
             self.logger.info('Downloading document')
@@ -99,7 +99,7 @@ class Command(papis.commands.Command):
                 ['add', '--from-url', doc['doc_url'], file_name]
             )
         elif self.args.arxiv:
-            if not 'url' in doc.keys():
+            if not doc.has('url'):
                 self.logger.error('No url data retrieved')
                 return 1
             papis.commands.main(

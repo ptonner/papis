@@ -10,6 +10,7 @@ import papis.config
 COMMAND_NAMES = [
     "default",
     "add",
+    "addto",
     "check",
     "config",
     "edit",
@@ -25,7 +26,6 @@ COMMAND_NAMES = [
     "run",
     "git",
     "gui",
-    "sync"
 ]
 
 DEFAULT_PARSER = None
@@ -233,7 +233,7 @@ def main(input_args=[]):
     set_args(args)
     logger.debug(args)
     logger.debug("running main")
-    commands["default"].main()
+    return commands["default"].main()
 
 
 def init_and_return_parser():
@@ -276,7 +276,7 @@ class Command(object):
             "search",
             help="Search query string",
             nargs="?",
-            default=".",
+            default=papis.config.get("default-query-string"),
             action="store"
         )
 
@@ -286,8 +286,9 @@ class Command(object):
             help="Run command involving git",
             action=None
             ):
-        action = action or ('store_false' if papis.config.get('use-git')
-                                else 'store_true')
+        action = action or (
+            'store_false' if papis.config.get('use-git') else 'store_true'
+        )
         self.parser.add_argument(
             *flags,
             help=help,
@@ -336,7 +337,9 @@ class Command(object):
             header_format = papis.config.get("header-format")
             match_format = papis.config.get("match-format")
             pick_config = dict(
-                header_filter=lambda x: papis.utils.format_doc(header_format, x),
+                header_filter=lambda x: papis.utils.format_doc(
+                    header_format, x
+                ),
                 match_filter=lambda x: papis.utils.format_doc(match_format, x)
             )
         return papis.api.pick(

@@ -1,5 +1,4 @@
 import papis
-import sys
 import os
 import re
 import papis.api
@@ -40,7 +39,8 @@ class Command(papis.commands.Command):
         documents = self.get_db().query(self.args.search)
 
         document = self.pick(documents)
-        if not document: return 0
+        if not document:
+            return 0
 
         lib_dir = os.path.expanduser(papis.config.get('dir'))
         folder = document.get_main_folder()
@@ -68,8 +68,6 @@ class Command(papis.commands.Command):
         if not os.path.exists(new_folder):
             self.logger.info("Creating path %s" % new_folder)
             os.makedirs(new_folder, mode=papis.config.getint('dir-umask'))
-
-        mvtool = papis.config.get("mvtool")
 
         cmd = (['git', '-C', folder] if self.args.git else []) + \
             ['mv', folder, new_folder]
