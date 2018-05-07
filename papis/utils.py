@@ -14,17 +14,20 @@ import papis.commands
 import papis.document
 import papis.crossref
 import papis.bibtex
+import papis.exceptions
 
 
 def general_open(fileName, key, default_opener="xdg-open", wait=True):
     try:
         opener = papis.config.get(key)
-    except KeyError:
+    except papis.exceptions.DefaultSettingValueMissing:
         opener = default_opener
     if isinstance(fileName, list):
         fileName = papis.api.pick(fileName)
+    # Take care of spaces in filenames
     if isinstance(opener, str):
         if wait:
+            fileName = "\"{}\"".format(fileName)
             return os.system(" ".join([opener, fileName]))
         else:
             cmd = opener.split() + [fileName]
@@ -94,9 +97,6 @@ def create_identifier(input_list):
     >>> m = create_identifier(string.ascii_lowercase)
     >>> next(m)
     'a'
-    >>> import itertools, string
-    >>> list(itertools.islice(create_identifier(string.ascii_uppercase),30))
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC', 'AD']
 
     (`see <
         https://stackoverflow.com/questions/14381940/

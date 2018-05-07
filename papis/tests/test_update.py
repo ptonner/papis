@@ -27,7 +27,7 @@ class Test(unittest.TestCase):
           pages = { 891--921 },
           title = { Zur Elektrodynamik bewegter K\"{o}rper },
           type = { article },
-          volume = { 322 },
+          volume = {322},
           year = { 1905 },
         }
 
@@ -39,7 +39,7 @@ class Test(unittest.TestCase):
           pages = { 891--921 },
           title = { La biblia en HD },
           type = { article },
-          volume = { 322 },
+          volume = {322},
           year = { 1905 },
         }
         """
@@ -55,5 +55,5 @@ class Test(unittest.TestCase):
         docs = self.get_docs()
         run(docs[0], force=True, from_bibtex=bibfile)
         docs = db.query_dict(dict(title='elektrodynamik'))
-        self.assertTrue(len(docs) > 0)
-        self.assertTrue(docs[0]["volume"] == "322")
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["volume"], "322")

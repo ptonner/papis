@@ -123,8 +123,13 @@ class Database(papis.database.base.Database):
             ]
         return documents
 
+
+    def get_all_query_string(self):
+        return '*'
+
     def get_all_documents(self):
-        return self.query("*")
+        return self.query(self.get_all_query_string())
+
 
     def get_id_key(self):
         """Get the unique key identifier name of the documents in the database
@@ -263,6 +268,11 @@ class Database(papis.database.base.Database):
             papis.config.get('whoosh-schema-prototype')
         )
         fields.update(user_prototype)
+        fields_list = eval(papis.config.get('whoosh-schema-fields'))
+        if not isinstance(fields_list, list):
+            raise Exception('whoosh-schema-fields should be a python list')
+        for field in fields_list:
+            fields.update({field: TEXT(stored=True)})
         #self.logger.debug('Schema prototype: {}'.format(fields))
         return fields
 
